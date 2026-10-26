@@ -6,6 +6,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk
+from preview import MarkdownPreview
 
 
 class MyNotesWindow(Adw.ApplicationWindow):
@@ -16,6 +17,7 @@ class MyNotesWindow(Adw.ApplicationWindow):
         self.etag = None
         self.busy = False
         self.allow_close = False
+        self.preview_timeout = None
 
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
@@ -26,6 +28,12 @@ class MyNotesWindow(Adw.ApplicationWindow):
         header.pack_end(Gtk.Button(label="Save", action_name="win.save"))
         menu = Gio.Menu()
         menu.append("Save As…", "win.save-as")
+        menu.append("Show Preview", "win.preview")
+        self.preview_action = Gio.SimpleAction.new_stateful("preview", None, GLib.Variant("b", True))
+        self.preview_action.connect("activate", self.toggle_preview)
+        self.add_action(self.preview_action)
+        app.set_accels_for_action("win.preview", ["<primary><shift>p"])
+        header.pack_end(Gtk.ToggleButton(label="Preview", action_name="win.preview"))
         header.pack_end(Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu))
         toolbar.add_top_bar(header)
 
@@ -36,14 +44,28 @@ class MyNotesWindow(Adw.ApplicationWindow):
             hexpand=True, vexpand=True,
         )
         self.editor.update_property([Gtk.AccessibleProperty.LABEL], ["Markdown editor"])
-        scroll = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
+        # GTK 4.18 overlay scrollbars can lose their allocation during live
+        # text reflow. Conventional scrollbars avoid that snapshot race.
+        scroll = Gtk.ScrolledWindow(hexpand=True, vexpand=True, overlay_scrolling=False)
         scroll.set_child(self.editor)
+        self.preview = MarkdownPreview()
+        self.preview_scroll = Gtk.ScrolledWindow(hexpand=True, vexpand=True,
+                                                overlay_scrolling=False)
+        self.preview_scroll.set_child(self.preview)
+        self.panes = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        self.panes.set_start_child(scroll)
+        self.panes.set_end_child(self.preview_scroll)
+        self.panes.set_resize_start_child(True)
+        self.panes.set_resize_end_child(True)
+        self.panes.set_shrink_start_child(False)
+        self.panes.set_shrink_end_child(False)
+        self.panes.set_position(500)
         self.status = Gtk.Label(xalign=1, margin_start=12, margin_end=12,
                                 margin_top=6, margin_bottom=6)
         self.status.add_css_class("dim-label")
         toolbar.add_bottom_bar(self.status)
         self.toasts = Adw.ToastOverlay()
-        self.toasts.set_child(scroll)
+        self.toasts.set_child(self.panes)
         toolbar.set_content(self.toasts)
         self.set_content(toolbar)
 
@@ -59,8 +81,33 @@ class MyNotesWindow(Adw.ApplicationWindow):
             app.set_accels_for_action(f"win.{name}", shortcuts)
         self.buffer.connect("changed", self.update_status)
         self.buffer.connect("modified-changed", self.update_status)
+        self.buffer.connect("changed", self.schedule_preview)
+        self.connect("destroy", self.cleanup_preview)
         self.connect("close-request", self.on_close_request)
         self.update_status()
+        self.refresh_preview()
+
+    def toggle_preview(self, action, _parameter):
+        visible = not action.get_state().get_boolean()
+        action.set_state(GLib.Variant("b", visible))
+        self.preview_scroll.set_visible(visible)
+        if visible:
+            self.refresh_preview()
+
+    def schedule_preview(self, *_args):
+        self.cleanup_preview()
+        if self.preview_scroll.get_visible():
+            self.preview_timeout = GLib.timeout_add(200, self.refresh_preview)
+
+    def cleanup_preview(self, *_args):
+        if self.preview_timeout is not None:
+            GLib.source_remove(self.preview_timeout)
+            self.preview_timeout = None
+
+    def refresh_preview(self):
+        self.cleanup_preview()
+        self.preview.render(self.text())
+        return GLib.SOURCE_REMOVE
 
     def text(self):
         return self.buffer.get_text(*self.buffer.get_bounds(), True)
