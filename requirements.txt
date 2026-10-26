@@ -1,0 +1,3 @@
+# Pin the parser version verified against CommonMark 0.31.2.
+markdown-it-py==4.0.0
+mdurl==0.1.2

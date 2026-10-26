@@ -7,6 +7,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk
 from preview import MarkdownPreview
+from links import resolve_link
 
 
 class MyNotesWindow(Adw.ApplicationWindow):
@@ -29,6 +30,10 @@ class MyNotesWindow(Adw.ApplicationWindow):
         menu = Gio.Menu()
         menu.append("Save As…", "win.save-as")
         menu.append("Show Preview", "win.preview")
+        menu.append("Enable GitHub Flavored Markdown (GFM)", "win.tables")
+        self.tables_action = Gio.SimpleAction.new_stateful("tables", None, GLib.Variant("b", True))
+        self.tables_action.connect("activate", self.toggle_tables)
+        self.add_action(self.tables_action)
         self.preview_action = Gio.SimpleAction.new_stateful("preview", None, GLib.Variant("b", True))
         self.preview_action.connect("activate", self.toggle_preview)
         self.add_action(self.preview_action)
@@ -49,6 +54,7 @@ class MyNotesWindow(Adw.ApplicationWindow):
         scroll = Gtk.ScrolledWindow(hexpand=True, vexpand=True, overlay_scrolling=False)
         scroll.set_child(self.editor)
         self.preview = MarkdownPreview()
+        self.preview.connect("link-activated", self.open_preview_link)
         self.preview_scroll = Gtk.ScrolledWindow(hexpand=True, vexpand=True,
                                                 overlay_scrolling=False)
         self.preview_scroll.set_child(self.preview)
@@ -94,6 +100,11 @@ class MyNotesWindow(Adw.ApplicationWindow):
         if visible:
             self.refresh_preview()
 
+    def toggle_tables(self, action, _parameter):
+        action.set_state(GLib.Variant("b", not action.get_state().get_boolean()))
+        if self.preview_scroll.get_visible():
+            self.refresh_preview()
+
     def schedule_preview(self, *_args):
         self.cleanup_preview()
         if self.preview_scroll.get_visible():
@@ -106,11 +117,35 @@ class MyNotesWindow(Adw.ApplicationWindow):
 
     def refresh_preview(self):
         self.cleanup_preview()
-        self.preview.render(self.text())
+        self.preview.render(self.text(), tables=self.tables_action.get_state().get_boolean())
         return GLib.SOURCE_REMOVE
 
     def text(self):
         return self.buffer.get_text(*self.buffer.get_bounds(), True)
+
+    def open_preview_link(self, _preview, destination):
+        try:
+            kind, uri = resolve_link(destination, self.file.get_uri() if self.file else None)
+            if kind == "fragment":
+                if not self.preview.scroll_to_heading(uri):
+                    self.error("Heading not found", "There is no matching heading in this note.")
+                return
+            self.launch_link(kind, uri)
+        except ValueError as error:
+            self.error("Could not open link", error)
+
+    def launch_link(self, kind, uri):
+        launcher = (Gtk.FileLauncher(file=Gio.File.new_for_uri(uri)) if kind == "file"
+                    else Gtk.UriLauncher(uri=uri))
+
+        def launched(source, result):
+            try:
+                source.launch_finish(result)
+            except GLib.Error as error:
+                if not error.matches(Gtk.dialog_error_quark(), Gtk.DialogError.DISMISSED):
+                    self.error("Could not open link", error.message)
+
+        launcher.launch(self, None, launched)
 
     def update_status(self, *_args):
         name = self.file.get_basename() if self.file else "Untitled"

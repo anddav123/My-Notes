@@ -3,11 +3,11 @@ from html.parser import HTMLParser
 from html import escape
 import re
 
-import markdown
+from markdown_engine import render_markdown
 import gi
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gtk, Pango
+from gi.repository import Gtk, Pango, Gdk, GObject
 
 
 class MarkdownText(HTMLParser):
@@ -28,10 +28,13 @@ class MarkdownText(HTMLParser):
         self.cell_header = False
         self.cell_align = 0.0
         self.trailing_newlines = 0
+        self.links = {}
 
     def add(self, text):
         if text:
             styles = tuple(self.STYLES[tag] for tag, _attrs in self.stack if tag in self.STYLES)
+            styles += tuple(attrs["_link"] for tag, attrs in self.stack
+                            if tag == "a" and "_link" in attrs)
             if self.cell is not None:
                 self.cell.append((text, styles))
             elif self.table is None:
@@ -49,6 +52,10 @@ class MarkdownText(HTMLParser):
             self.hidden += 1
         if self.hidden:
             return
+        if tag == "a" and "href" in attrs:
+            key = f"destination:{len(self.links)}"
+            self.links[key] = (attrs["href"], attrs.get("title", ""))
+            attrs["_link"] = key
         if tag == "table":
             self.newline(2)
             self.table = []
@@ -63,7 +70,11 @@ class MarkdownText(HTMLParser):
             self.newline(2)
         if tag in ("ul", "ol"):
             self.newline()
-            self.lists.append([tag, 0])
+            try:
+                start = int(attrs.get("start", "1")) if tag == "ol" else 1
+            except ValueError:
+                start = 1
+            self.lists.append([tag, start - 1])
         if tag == "li":
             self.newline()
             if self.lists:
@@ -106,10 +117,6 @@ class MarkdownText(HTMLParser):
             self.newline(2)
         matching = next((i for i in range(len(self.stack) - 1, -1, -1)
                          if self.stack[i][0] == tag), None)
-        if tag == "a" and matching is not None:
-            href = self.stack[matching][1].get("href", "")
-            if href:
-                self.add(f" ({href})")
         if matching is not None:
             del self.stack[matching:]
         if tag in ("ul", "ol"):
@@ -124,29 +131,46 @@ class MarkdownText(HTMLParser):
     def handle_data(self, data):
         if self.hidden:
             return
-        if not any(tag == "pre" for tag, _attrs in self.stack):
+        if not any(tag in ("pre", "code") for tag, _attrs in self.stack):
             # Ignore the HTML serializer's whitespace between block elements.
             if data.isspace() and "\n" in data:
                 return
-            data = re.sub(r"\s+", " ", data)
+            data = re.sub(r"[ \t\n\r\f]+", " ", data)
         self.add(data)
 
 
-def parse_markdown(source):
+def parse_markdown(source, *, tables=True):
     parser = MarkdownText()
-    parser.feed(markdown.markdown(source, extensions=["fenced_code", "sane_lists", "tables"]))
+    parser.feed(render_markdown(source, tables=tables))
     parser.close()
     return parser
 
 
 class MarkdownPreview(Gtk.TextView):
+    __gsignals__ = {"link-activated": (GObject.SignalFlags.RUN_LAST, None, (str,))}
+
     def __init__(self):
-        super().__init__(editable=False, cursor_visible=False,
+        super().__init__(editable=False, cursor_visible=True,
                          wrap_mode=Gtk.WrapMode.WORD_CHAR,
                          left_margin=24, right_margin=24, top_margin=24, bottom_margin=24,
                          hexpand=True, vexpand=True)
         self.update_property([Gtk.AccessibleProperty.LABEL], ["Markdown preview"])
         self.table_widgets = []
+        self.link_tags = {}
+        self.links = {}
+        self.press_position = None
+        click = Gtk.GestureClick(button=1)
+        click.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        click.connect("pressed", self.link_pressed)
+        click.connect("released", self.link_released)
+        self.add_controller(click)
+        motion = Gtk.EventControllerMotion()
+        motion.connect("motion", self.link_motion)
+        motion.connect("leave", self.link_leave)
+        self.add_controller(motion)
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self.link_key_pressed)
+        self.add_controller(keys)
         buffer = self.get_buffer()
         buffer.create_tag("bold", weight=Pango.Weight.BOLD)
         buffer.create_tag("italic", style=Pango.Style.ITALIC)
@@ -157,13 +181,91 @@ class MarkdownPreview(Gtk.TextView):
         for level, scale in enumerate((1.8, 1.5, 1.3, 1.15, 1.05, 1.0), 1):
             buffer.create_tag(f"h{level}", scale=scale, weight=Pango.Weight.BOLD)
 
-    def render(self, source):
-        parsed = parse_markdown(source)
+    def destination_at(self, iterator):
+        for tag in iterator.get_tags():
+            name = tag.get_property("name")
+            if name in self.links:
+                return self.links[name]
+        return None
+
+    def destination_at_point(self, x, y):
+        bx, by = self.window_to_buffer_coords(Gtk.TextWindowType.WIDGET, int(x), int(y))
+        on_text, iterator = self.get_iter_at_location(bx, by)
+        return self.destination_at(iterator) if on_text else None
+
+    def link_pressed(self, _gesture, _count, x, y):
+        self.press_position = (x, y)
+
+    def link_released(self, _gesture, count, x, y):
+        pressed, self.press_position = self.press_position, None
+        if count != 1 or pressed is None or self.get_buffer().get_has_selection():
+            return
+        if abs(x - pressed[0]) > 5 or abs(y - pressed[1]) > 5:
+            return
+        destination = self.destination_at_point(x, y)
+        if destination:
+            self.emit("link-activated", destination[0])
+
+    def link_motion(self, _controller, x, y):
+        destination = self.destination_at_point(x, y)
+        self.set_cursor_from_name("pointer" if destination else "text")
+        self.set_tooltip_text("\n".join(filter(None, (destination[1], destination[0]))) if destination else None)
+
+    def link_leave(self, _controller):
+        self.set_cursor_from_name("text")
+        self.set_tooltip_text(None)
+
+    def link_key_pressed(self, _controller, keyval, _keycode, state):
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter) and state & Gdk.ModifierType.CONTROL_MASK:
+            buffer = self.get_buffer()
+            destination = self.destination_at(buffer.get_iter_at_mark(buffer.get_insert()))
+            if destination:
+                self.emit("link-activated", destination[0])
+                return True
+        return False
+
+    def table_link_activated(self, _label, href):
+        self.emit("link-activated", href)
+        return True  # Always handle here; never let Gtk.Label launch implicitly.
+
+    def scroll_to_heading(self, fragment):
+        buffer = self.get_buffer()
+        if not fragment:
+            self.scroll_to_iter(buffer.get_start_iter(), 0.0, True, 0.0, 0.0)
+            return True
+        counts = {}
+        for line in range(buffer.get_line_count()):
+            _found, start = buffer.get_iter_at_line(line)
+            if not any((tag.get_property("name") or "") in ("h1", "h2", "h3", "h4", "h5", "h6")
+                       for tag in start.get_tags()):
+                continue
+            end = start.copy()
+            end.forward_to_line_end()
+            text = buffer.get_text(start, end, True)
+            slug = re.sub(r"[^\w\s-]", "", text.lower())
+            slug = re.sub(r"\s+", "-", slug.strip())
+            count = counts.get(slug, 0)
+            counts[slug] = count + 1
+            unique = slug + (f"-{count}" if count else "")
+            if unique == fragment:
+                self.scroll_to_iter(start, 0.1, True, 0.0, 0.0)
+                return True
+        return False
+
+    def render(self, source, *, tables=True):
+        parsed = parse_markdown(source, tables=tables)
         buffer = self.get_buffer()
         for widget in self.table_widgets:
             self.remove(widget)
         self.table_widgets.clear()
         buffer.set_text("")
+        for tag in self.link_tags.values():
+            buffer.get_tag_table().remove(tag)
+        self.link_tags.clear()
+        self.links = parsed.links
+        for name in self.links:
+            self.link_tags[name] = buffer.create_tag(name)
+        self.link_leave(None)
         for text, styles in parsed.runs:
             start = buffer.get_char_count()
             if styles and styles[0].startswith("table:"):
@@ -177,8 +279,7 @@ class MarkdownPreview(Gtk.TextView):
                     buffer.apply_tag_by_name(style, buffer.get_iter_at_offset(start),
                                              buffer.get_end_iter())
 
-    @staticmethod
-    def make_table(rows):
+    def make_table(self, rows):
         grid = Gtk.Grid(column_homogeneous=False)
         cell_style = Gtk.CssProvider()
         cell_style.load_from_string(
@@ -194,6 +295,10 @@ class MarkdownPreview(Gtk.TextView):
                         tag = markup_tags.get(style)
                         if tag:
                             text = f"<{tag}>{text}</{tag}>"
+                        elif style in self.links:
+                            href, title = self.links[style]
+                            title_attr = f' title="{escape(title, quote=True)}"' if title else ""
+                            text = f'<a href="{escape(href, quote=True)}"{title_attr}>{text}</a>'
                     parts.append(text)
                 markup = "".join(parts)
                 if header:
@@ -208,6 +313,7 @@ class MarkdownPreview(Gtk.TextView):
                                   max_width_chars=60, margin_start=10, margin_end=10,
                                   margin_top=8, margin_bottom=8)
                 label.set_markup(markup)
+                label.connect("activate-link", self.table_link_activated)
                 frame = Gtk.Frame()
                 if not header and y % 2 == 0:
                     frame.add_css_class("alternate-row")

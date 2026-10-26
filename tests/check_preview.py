@@ -37,7 +37,8 @@ parsed = parse_markdown(source)
 plain = "".join(text for text, _styles in parsed.runs)
 assert "Title" in plain and "**bold**" not in plain
 assert "• First" in plain and "print('<hello>')" in plain
-assert "https://gnome.org" in plain and "[Image: My image]" in plain
+assert "GNOME" in plain and "[Image: My image]" in plain
+assert any(href == "https://gnome.org" for href, _title in parsed.links.values())
 assert any("h1" in styles for _text, styles in parsed.runs)
 assert any("bold" in styles for _text, styles in parsed.runs)
 assert len(parsed.tables) == 1 and len(parsed.tables[0]) == 3
