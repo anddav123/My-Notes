@@ -1,2 +1,2 @@
 # My-Notes
-my own custom mark down editor and viewer
+A custom mark down editor and viewer. along with file organiser 
