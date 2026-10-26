@@ -61,6 +61,20 @@ Markdown-to-HTML tests verify the parser. Raw HTML still has limited
 native rendering. Passing the parser tests does not certify full preview
 conformance. See `docs/commonmark-audit.md` for measured results and limitations.
 
+## Lists and blockquotes
+
+Nested lists and blockquotes use paragraph margins for each nesting level.
+Wrapped list text uses a hanging indent aligned with the item content, and
+ordered markers reserve space for their actual displayed width. Tight lists
+keep adjacent items together; loose lists preserve paragraph gaps without
+separating the first paragraph from its bullet. Continuation paragraphs return
+to their parent item's margin after a nested list, quote, or code block.
+
+Open `examples/lists-quotes-demo.md` for mixed lists, nested quotations, code,
+empty items, and longer ordered markers. These are core CommonMark features
+and work with the GFM extension switch off. A focused test measures actual
+GTK text positions and wrapped-line alignment in a displayed window.
+
 ## Links
 
 Click a link in the preview to open it. Web links use your default browser,
@@ -134,6 +148,7 @@ PYTHONPATH=. .venv/bin/python tests/check_preview.py
 PYTHONPATH=. .venv/bin/python tests/check_table_layout.py
 PYTHONPATH=. .venv/bin/python tests/check_links.py
 PYTHONPATH=. .venv/bin/python tests/check_images.py
+PYTHONPATH=. .venv/bin/python tests/check_lists_quotes.py
 .venv/bin/python tests/check_commonmark.py
 PYTHONPATH=. .venv/bin/python tests/check_commonmark_preview.py
 ```

@@ -48,8 +48,11 @@ Known gaps include:
   interaction is not certified by the official HTML parser suite.
 - Raw HTML is reduced to supported native text styling; browser layouts are
   not reproduced, and scripts/styles are ignored.
-- Complex list/blockquote spacing and indentation are approximations and
-  have not undergone exhaustive visual or semantic comparison.
+- List and quote layout now has targeted displayed-coordinate tests for
+  nesting, tight/loose spacing, hanging indents, continuation paragraphs and
+  margin restoration. The demo was visually checked in GNOME, including mixed
+  lists, nested quotes and code. This is not an exhaustive visual comparison
+  of every official example or every possible container combination.
 - Code-block language metadata is not exposed in the UI.
 
 Tables are an optional extension, not part of CommonMark. They remain enabled

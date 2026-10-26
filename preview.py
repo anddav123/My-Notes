@@ -31,13 +31,31 @@ class MarkdownText(HTMLParser):
         self.trailing_newlines = 0
         self.links = {}
         self.images = {}
+        self.layouts = {}
+
+    def current_item(self):
+        return next((attrs for tag, attrs in reversed(self.stack) if tag == "li"), None)
+
+    def context_styles(self):
+        styles = tuple(self.STYLES[tag] for tag, _attrs in self.stack if tag in self.STYLES)
+        styles += tuple(attrs["_link"] for tag, attrs in self.stack
+                        if tag == "a" and "_link" in attrs)
+        styles += tuple(attrs["key"] for tag, attrs in self.stack if tag == "image-marker")
+        depth = sum(tag == "li" for tag, _attrs in self.stack)
+        quotes = sum(tag == "blockquote" for tag, _attrs in self.stack)
+        code = any(tag == "pre" for tag, _attrs in self.stack)
+        if depth or quotes:
+            item = self.current_item()
+            marker = item.get("_hanging", "") if item and not code else ""
+            markers = tuple(attrs.get("_marker", "") for tag, attrs in self.stack if tag == "li")
+            key = f"layout:{quotes}:{marker.encode().hex()}:{int(code)}:" + ",".join(m.encode().hex() for m in markers)
+            self.layouts[key] = (markers, quotes, marker, code)
+            styles += (key,)
+        return styles
 
     def add(self, text):
         if text:
-            styles = tuple(self.STYLES[tag] for tag, _attrs in self.stack if tag in self.STYLES)
-            styles += tuple(attrs["_link"] for tag, attrs in self.stack
-                            if tag == "a" and "_link" in attrs)
-            styles += tuple(attrs["key"] for tag, attrs in self.stack if tag == "image-marker")
+            styles = self.context_styles()
             if self.cell is not None:
                 self.cell.append((text, styles))
             elif self.table is None:
@@ -69,8 +87,15 @@ class MarkdownText(HTMLParser):
             self.cell_header = tag == "th"
             style = attrs.get("style", "")
             self.cell_align = 1.0 if "right" in style else 0.5 if "center" in style else 0.0
-        if tag in ("p", "pre", "blockquote") or re.fullmatch("h[1-6]", tag):
+        item = self.current_item()
+        if tag == "p" and item and item.get("_first_block", False):
+            # A loose-list paragraph follows its marker on the same line.
+            item["_first_block"] = False
+        elif tag in ("p", "pre", "blockquote") or re.fullmatch("h[1-6]", tag):
             self.newline(2)
+            if item:
+                item["_hanging"] = ""
+                item["_first_block"] = False
         if tag in ("ul", "ol"):
             self.newline()
             try:
@@ -80,10 +105,15 @@ class MarkdownText(HTMLParser):
             self.lists.append([tag, start - 1])
         if tag == "li":
             self.newline()
+            marker = ""
             if self.lists:
                 self.lists[-1][1] += 1
                 kind, number = self.lists[-1]
-                self.add("  " * (len(self.lists) - 1) + (f"{number}. " if kind == "ol" else "• "))
+                marker = f"{number}. " if kind == "ol" else "• "
+            attrs.update(_marker=marker, _hanging=marker, _first_block=True)
+            self.stack.append((tag, attrs))
+            self.add(marker)
+            return
         if tag == "br":
             self.add("\n")
         elif tag == "hr":
@@ -119,7 +149,7 @@ class MarkdownText(HTMLParser):
         elif tag == "table" and self.table is not None:
             self.tables.append(self.table)
             self.table = None
-            self.runs.append(("\ufffc", (f"table:{len(self.tables) - 1}",)))
+            self.runs.append(("\ufffc", (f"table:{len(self.tables) - 1}",) + self.context_styles()))
             self.trailing_newlines = 0
             self.newline(2)
         matching = next((i for i in range(len(self.stack) - 1, -1, -1)
@@ -130,6 +160,9 @@ class MarkdownText(HTMLParser):
             if self.lists:
                 self.lists.pop()
             self.newline(1 if self.lists else 2)
+            item = self.current_item()
+            if item:
+                item["_hanging"] = ""
         elif tag == "li":
             self.newline()
         elif tag in ("p", "pre", "blockquote") or re.fullmatch("h[1-6]", tag):
@@ -143,6 +176,9 @@ class MarkdownText(HTMLParser):
             if data.isspace() and "\n" in data:
                 return
             data = re.sub(r"[ \t\n\r\f]+", " ", data)
+        item = self.current_item()
+        if item and data.strip():
+            item["_first_block"] = False
         self.add(data)
 
 
@@ -170,6 +206,7 @@ class MarkdownPreview(Gtk.TextView):
         self.images = {}
         self.connect("destroy", self.cleanup_images)
         self.link_tags = {}
+        self.layout_tags = {}
         self.links = {}
         self.press_position = None
         click = Gtk.GestureClick(button=1)
@@ -189,7 +226,7 @@ class MarkdownPreview(Gtk.TextView):
         buffer.create_tag("italic", style=Pango.Style.ITALIC)
         buffer.create_tag("code", family="monospace")
         buffer.create_tag("pre", family="monospace", left_margin=12)
-        buffer.create_tag("quote", left_margin=20, style=Pango.Style.ITALIC)
+        buffer.create_tag("quote", style=Pango.Style.ITALIC)
         buffer.create_tag("link", underline=Pango.Underline.SINGLE)
         for level, scale in enumerate((1.8, 1.5, 1.3, 1.15, 1.05, 1.0), 1):
             buffer.create_tag(f"h{level}", scale=scale, weight=Pango.Weight.BOLD)
@@ -307,6 +344,17 @@ class MarkdownPreview(Gtk.TextView):
         for tag in self.link_tags.values():
             buffer.get_tag_table().remove(tag)
         self.link_tags.clear()
+        for tag in self.layout_tags.values():
+            buffer.get_tag_table().remove(tag)
+        self.layout_tags.clear()
+        for name, (markers, quotes, marker, code) in parsed.layouts.items():
+            marker_width = self.create_pango_layout(marker).get_pixel_size()[0] if marker else 0
+            list_margin = sum(max(28, self.create_pango_layout(prefix).get_pixel_size()[0] + 8)
+                              for prefix in markers)
+            self.layout_tags[name] = buffer.create_tag(
+                name, left_margin=max(0, self.get_left_margin() + list_margin + quotes * 24
+                                      + (12 if code else 0) - marker_width),
+                indent=-marker_width)
         self.links = parsed.links
         for name in self.links:
             self.link_tags[name] = buffer.create_tag(name)
@@ -320,7 +368,7 @@ class MarkdownPreview(Gtk.TextView):
                 self.add_child_at_anchor(widget, anchor)
                 self.inline_images.append(widget)
                 for style in styles:
-                    if style in self.links:
+                    if style in self.links or style in self.layout_tags:
                         buffer.apply_tag_by_name(style, buffer.get_iter_at_offset(start),
                                                  buffer.get_end_iter())
             elif styles and styles[0].startswith("table:"):
@@ -328,6 +376,10 @@ class MarkdownPreview(Gtk.TextView):
                 grid = self.make_table(parsed.tables[int(styles[0].split(":")[1])])
                 self.add_child_at_anchor(grid, anchor)
                 self.table_widgets.append(grid)
+                for style in styles:
+                    if style in self.layout_tags:
+                        buffer.apply_tag_by_name(style, buffer.get_iter_at_offset(start),
+                                                 buffer.get_end_iter())
             else:
                 buffer.insert(buffer.get_end_iter(), text)
                 for style in styles:
