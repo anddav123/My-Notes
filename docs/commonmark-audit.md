@@ -55,11 +55,11 @@ Known gaps include:
   of every official example or every possible container combination.
 - Code-block language metadata is not exposed in the UI.
 
-Tables are an optional extension, not part of CommonMark. They remain enabled
-initially to preserve existing notes. Turn off **Enable GitHub Flavored Markdown (GFM)** in
-the menu for core CommonMark interpretation. The strict suite tests the same
-shared parsing function with that extension disabled; table rendering has
-separate regression tests.
+GFM mode is optional and initially enabled. Turn off **Enable GitHub Flavored
+Markdown (GFM)** in the menu for core CommonMark interpretation. The strict
+suite tests the shared parsing entry point with GFM disabled. GFM uses GitHub's
+reference parser for its five extensions and has separate parser and native
+preview checks; see `docs/gfm-audit.md` for measured results and known gaps.
 
 Do not describe My Notes as fully CommonMark-compliant until these preview
 gaps have been resolved and independently verified.

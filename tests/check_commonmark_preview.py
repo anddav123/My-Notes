@@ -28,10 +28,10 @@ window = MyNotesWindow(app)
 window.buffer.set_text(table)
 window.refresh_preview()
 assert len(window.preview.table_widgets) == 1
-window.lookup_action("tables").activate(None)
+window.lookup_action("gfm").activate(None)
 assert not window.preview.table_widgets
 assert window.text() == table and window.buffer.get_modified()
-window.lookup_action("tables").activate(None)
+window.lookup_action("gfm").activate(None)
 assert len(window.preview.table_widgets) == 1
 
 fixtures = Path(__file__).parent / "commonmark" / "spec-0.31.2.json"

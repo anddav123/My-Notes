@@ -51,7 +51,7 @@ assert parsed.tables[0][0][0][1] is True
 assert parsed.tables[0][1][1][2] == 1.0
 assert parsed.tables[0][1][2][2] == 0.5
 assert "bold" in parsed.tables[0][1][0][0][0][1]
-assert "alert" not in "".join(t for t, _s in parse_markdown('<script>alert(1)</script>').runs)
+assert "alert" not in "".join(t for t, _s in parse_markdown('<script>alert(1)</script>', gfm=False).runs)
 
 app = MyNotesApp()
 app.set_flags(Gio.ApplicationFlags.NON_UNIQUE)

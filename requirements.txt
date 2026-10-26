@@ -1,3 +1,7 @@
 # Pin the parser version verified against CommonMark 0.31.2.
 markdown-it-py==4.0.0
 mdurl==0.1.2
+# GitHub reference parser for the GFM mode, separate from the core parser.
+cmarkgfm==2025.10.22
+cffi==2.0.0
+pycparser==2.23

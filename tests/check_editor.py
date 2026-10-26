@@ -27,6 +27,7 @@ with tempfile.TemporaryDirectory() as directory:
     note = "# My note\n\nHello **Markdown** — café 👋\n"
     window.buffer.set_text(note)
     assert window.buffer.get_modified()
+    assert window.save_button.has_css_class("suggested-action")
     assert "•" in window.title_widget.get_title()
     window.set_busy(True)
     window.write_file(file)
@@ -34,6 +35,7 @@ with tempfile.TemporaryDirectory() as directory:
     assert not errors, errors
     assert path.read_text() == note
     assert not window.buffer.get_modified()
+    assert not window.save_button.has_css_class("suggested-action")
     assert window.file.equal(file)
 
     window.reset_document()
@@ -51,6 +53,7 @@ with tempfile.TemporaryDirectory() as directory:
     wait(lambda: not window.busy)
     assert errors and path.read_text() == "External edit, preserve this"
     assert window.buffer.get_modified()
+    assert window.save_button.has_css_class("suggested-action")
     errors.clear()
 
     # Invalid text must leave the existing buffer and document identity intact.

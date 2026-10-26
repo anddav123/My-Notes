@@ -41,8 +41,12 @@ are used exactly as entered.
 
 ## Live Markdown preview
 
-The preview appears beside the editor and updates shortly after typing stops.
-Drag the divider to adjust the pane widths. Use the **Preview** button or `Ctrl+Shift+P` to show or hide it.
+The preview updates shortly after typing stops. The linked **Editor | Preview**
+buttons select three layouts: Editor only, Editor & preview, or Preview only.
+Turn either pane on or off; the last visible pane stays on to avoid an empty
+window. `Ctrl+Shift+P` cycles through all three layouts. When both are visible,
+drag the divider to adjust the widths; its position is remembered when returning
+from a single-pane view. Switching views preserves the note and unsaved changes.
 
 The native GTK preview renders headings, bold and italic text, lists,
 blockquotes, inline and fenced code, and tables. Links are clickable, and
@@ -52,9 +56,39 @@ Syntax highlighting and the file organiser remain future work.
 
 ## CommonMark compatibility
 
-The parser uses markdown-it-py in its CommonMark configuration. The optional
-**Enable GitHub Flavored Markdown (GFM)** menu setting is enabled initially to preserve table
-previews; turn it off to use core CommonMark syntax without the table extension.
+With **Enable GitHub Flavored Markdown (GFM)** turned off, the parser uses
+markdown-it-py in its tested CommonMark configuration. With it turned on,
+GitHub's reference parser enables all five GFM extensions together. The status
+bar shows the current mode. GFM is enabled initially.
+
+## Preferences
+
+Open **Preferences** from the menu or press `Ctrl+,`. Under **Toolbar**, choose
+**Text** (the default) or **Icons**. New, Open, Save, Editor and Preview update
+immediately, including in other open windows. Icon buttons retain their
+tooltips, accessible labels, keyboard shortcuts and toggle states.
+
+The choice is saved per user in `$XDG_CONFIG_HOME/MyNotes/preferences.json`
+(normally `~/.config/MyNotes/preferences.json`) and restored at the next launch.
+It does not change note files. Invalid settings fall back to Text; a failed
+save is reported without changing the current preference.
+
+## GitHub Flavored Markdown
+
+GFM mode adds tables, task lists, single/double-tilde strikethrough, automatic
+links for bare URLs and email addresses, and GFM's disallowed-HTML tag filter.
+Turn the menu switch off to restore core CommonMark interpretation of all
+these features at once. The source is never rewritten by the switch.
+
+Tasks use `- [ ]` for incomplete and `- [x]` or `- [X]` for complete. Preview
+checkboxes are read-only; edit the marker in the source to change task state.
+Use `~~removed~~` or `~removed~` for strikethrough. Code spans and code blocks
+keep all of this syntax literal.
+
+Open `examples/gfm-demo.md` to compare modes. The GFM extension audit passes
+26 of 28 published examples; two unusual XMPP resource-path cases differ in
+the reference library. See `docs/gfm-audit.md` for exact scope and results.
+This does not constitute full GFM conformance or all GitHub.com features.
 
 Parser compliance and GTK preview completeness are separate. The official
 Markdown-to-HTML tests verify the parser. Raw HTML still has limited
@@ -93,7 +127,7 @@ Local `#heading-name` links scroll to matching headings (lowercase words joined
 with hyphens; duplicate headings receive `-1`, `-2`, etc.). Heading anchors are
 an application convenience rather than a CommonMark syntax requirement.
 
-HTTP, HTTPS, mailto and file destinations are supported. Unsupported schemes
+HTTP, HTTPS, mailto, XMPP and file destinations are supported. Unsupported schemes
 produce a message. Open `examples/links-demo.md` to try the feature.
 
 ## Images
@@ -149,6 +183,9 @@ PYTHONPATH=. .venv/bin/python tests/check_table_layout.py
 PYTHONPATH=. .venv/bin/python tests/check_links.py
 PYTHONPATH=. .venv/bin/python tests/check_images.py
 PYTHONPATH=. .venv/bin/python tests/check_lists_quotes.py
+PYTHONPATH=. .venv/bin/python tests/check_gfm.py
+PYTHONPATH=. .venv/bin/python tests/check_view_modes.py
+PYTHONPATH=. .venv/bin/python tests/check_preferences.py
 .venv/bin/python tests/check_commonmark.py
 PYTHONPATH=. .venv/bin/python tests/check_commonmark_preview.py
 ```

@@ -14,7 +14,8 @@ from gi.repository import Gtk, Pango, Gdk, GObject
 class MarkdownText(HTMLParser):
     STYLES = {"strong": "bold", "b": "bold", "em": "italic", "i": "italic",
               "code": "code", "pre": "pre", "blockquote": "quote",
-              "a": "link", **{f"h{i}": f"h{i}" for i in range(1, 7)}}
+              "a": "link", "del": "strike", "s": "strike",
+              **{f"h{i}": f"h{i}" for i in range(1, 7)}}
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -32,6 +33,7 @@ class MarkdownText(HTMLParser):
         self.links = {}
         self.images = {}
         self.layouts = {}
+        self.tasks = {}
 
     def current_item(self):
         return next((attrs for tag, attrs in reversed(self.stack) if tag == "li"), None)
@@ -85,7 +87,7 @@ class MarkdownText(HTMLParser):
         elif tag in ("td", "th") and self.row is not None:
             self.cell = []
             self.cell_header = tag == "th"
-            style = attrs.get("style", "")
+            style = attrs.get("style", "") + attrs.get("align", "")
             self.cell_align = 1.0 if "right" in style else 0.5 if "center" in style else 0.0
         item = self.current_item()
         if tag == "p" and item and item.get("_first_block", False):
@@ -110,11 +112,25 @@ class MarkdownText(HTMLParser):
                 self.lists[-1][1] += 1
                 kind, number = self.lists[-1]
                 marker = f"{number}. " if kind == "ol" else "• "
-            attrs.update(_marker=marker, _hanging=marker, _first_block=True)
+            attrs.update(_marker=marker, _hanging=marker, _first_block=True,
+                         _marker_run=len(self.runs))
             self.stack.append((tag, attrs))
             self.add(marker)
             return
-        if tag == "br":
+        if tag == "input" and attrs.get("type", "").lower() == "checkbox":
+            checked = "checked" in attrs
+            item = self.current_item()
+            if item:
+                index = item.get("_marker_run", -1)
+                if 0 <= index < len(self.runs) and self.runs[index][0] == item["_marker"]:
+                    del self.runs[index]
+                item["_marker"] = item["_hanging"] = "☑ " if checked else "☐ "
+            key = f"task:{len(self.tasks)}"
+            self.tasks[key] = checked
+            self.stack.append(("image-marker", {"key": key}))
+            self.add("\ufffc")
+            self.stack.pop()
+        elif tag == "br":
             self.add("\n")
         elif tag == "hr":
             self.newline(2)
@@ -131,7 +147,7 @@ class MarkdownText(HTMLParser):
 
     def handle_startendtag(self, tag, attrs):
         self.handle_starttag(tag, attrs)
-        if tag not in ("img", "br", "hr"):
+        if tag not in ("img", "br", "hr", "input"):
             self.handle_endtag(tag)
 
     def handle_endtag(self, tag):
@@ -182,9 +198,11 @@ class MarkdownText(HTMLParser):
         self.add(data)
 
 
-def parse_markdown(source, *, tables=True):
+def parse_markdown(source, *, gfm=True, tables=None):
+    if tables is not None:
+        gfm = tables
     parser = MarkdownText()
-    parser.feed(render_markdown(source, tables=tables))
+    parser.feed(render_markdown(source, gfm=gfm))
     parser.close()
     return parser
 
@@ -207,6 +225,7 @@ class MarkdownPreview(Gtk.TextView):
         self.connect("destroy", self.cleanup_images)
         self.link_tags = {}
         self.layout_tags = {}
+        self.task_widgets = []
         self.links = {}
         self.press_position = None
         click = Gtk.GestureClick(button=1)
@@ -228,6 +247,7 @@ class MarkdownPreview(Gtk.TextView):
         buffer.create_tag("pre", family="monospace", left_margin=12)
         buffer.create_tag("quote", style=Pango.Style.ITALIC)
         buffer.create_tag("link", underline=Pango.Underline.SINGLE)
+        buffer.create_tag("strike", strikethrough=True)
         for level, scale in enumerate((1.8, 1.5, 1.3, 1.15, 1.05, 1.0), 1):
             buffer.create_tag(f"h{level}", scale=scale, weight=Pango.Weight.BOLD)
 
@@ -328,12 +348,31 @@ class MarkdownPreview(Gtk.TextView):
             image.link_button = button
         return image
 
-    def render(self, source, *, tables=True, document_uri=None):
-        parsed = parse_markdown(source, tables=tables)
+    @staticmethod
+    def task_widget(checked):
+        checkbox = Gtk.CheckButton(active=checked, sensitive=False, focusable=False,
+                                   valign=Gtk.Align.CENTER)
+        checkbox.update_property([Gtk.AccessibleProperty.LABEL],
+                                 ["Completed task" if checked else "Incomplete task"])
+        return checkbox
+
+    def marker_width(self, marker):
+        if marker in ("☑ ", "☐ "):
+            return (self.task_widget(False).measure(Gtk.Orientation.HORIZONTAL, -1)[1]
+                    + self.create_pango_layout(" ").get_pixel_size()[0])
+        return self.create_pango_layout(marker).get_pixel_size()[0] if marker else 0
+
+    def render(self, source, *, gfm=True, tables=None, document_uri=None):
+        if tables is not None:
+            gfm = tables
+        parsed = parse_markdown(source, gfm=gfm)
         self.cleanup_images()
         self.images = parsed.images
         self.document_uri = document_uri
         buffer = self.get_buffer()
+        for widget in self.task_widgets:
+            self.remove(widget)
+        self.task_widgets.clear()
         for widget in self.inline_images:
             self.remove(widget)
         self.inline_images.clear()
@@ -348,8 +387,8 @@ class MarkdownPreview(Gtk.TextView):
             buffer.get_tag_table().remove(tag)
         self.layout_tags.clear()
         for name, (markers, quotes, marker, code) in parsed.layouts.items():
-            marker_width = self.create_pango_layout(marker).get_pixel_size()[0] if marker else 0
-            list_margin = sum(max(28, self.create_pango_layout(prefix).get_pixel_size()[0] + 8)
+            marker_width = self.marker_width(marker)
+            list_margin = sum(max(28, self.marker_width(prefix) + 8)
                               for prefix in markers)
             self.layout_tags[name] = buffer.create_tag(
                 name, left_margin=max(0, self.get_left_margin() + list_margin + quotes * 24
@@ -362,7 +401,17 @@ class MarkdownPreview(Gtk.TextView):
         for text, styles in parsed.runs:
             start = buffer.get_char_count()
             image_key = next((s for s in styles if s in self.images), None)
-            if image_key is not None:
+            task_key = next((s for s in styles if s in parsed.tasks), None)
+            if task_key is not None:
+                anchor = buffer.create_child_anchor(buffer.get_end_iter())
+                widget = self.task_widget(parsed.tasks[task_key])
+                self.add_child_at_anchor(widget, anchor)
+                self.task_widgets.append(widget)
+                for style in styles:
+                    if style in self.layout_tags:
+                        buffer.apply_tag_by_name(style, buffer.get_iter_at_offset(start),
+                                                 buffer.get_end_iter())
+            elif image_key is not None:
                 anchor = buffer.create_child_anchor(buffer.get_end_iter())
                 widget = self.make_image(image_key, styles)
                 self.add_child_at_anchor(widget, anchor)
@@ -427,7 +476,7 @@ class MarkdownPreview(Gtk.TextView):
         return grid
 
     def cell_label(self, runs, header, align):
-        markup_tags = {"bold": "b", "italic": "i", "code": "tt"}
+        markup_tags = {"bold": "b", "italic": "i", "code": "tt", "strike": "s"}
         parts = []
         for text, styles in runs:
             text = escape(text)

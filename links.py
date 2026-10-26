@@ -17,7 +17,7 @@ def resolve_link(destination, document_uri=None):
         destination = urljoin(document_uri, destination)
         parsed = urlsplit(destination)
     scheme = parsed.scheme.lower()
-    if scheme not in ("http", "https", "mailto", "file"):
+    if scheme not in ("http", "https", "mailto", "xmpp", "file"):
         raise ValueError(f"Links using '{scheme}' are not supported.")
     if scheme in ("http", "https") and not parsed.netloc:
         raise ValueError("This web link is missing a website address.")
