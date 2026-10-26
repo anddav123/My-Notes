@@ -39,7 +39,10 @@ that every possible Markdown document has been tested.
 **The entire native GTK preview is not yet fully CommonMark-conformant.**
 Known gaps include:
 
-- Images are represented by descriptions instead of rendered images.
+- Images now render locally and, after an explicit load action, from HTTP/S.
+  Focused GTK tests cover paths, references, scaling, fallbacks, linked images,
+  tables and remote-load lifecycle. Animation is a static frame; this has not
+  undergone exhaustive browser-equivalent visual comparison.
 - Links now use clickable labels, optional hover titles, note-relative file
   resolution and keyboard activation. These have focused GTK tests; link
   interaction is not certified by the official HTML parser suite.

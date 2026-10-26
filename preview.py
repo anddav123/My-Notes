@@ -1,9 +1,10 @@
-"""Render Markdown as styled native GTK text without loading web content."""
+"""Render Markdown as native GTK text, tables, links, and images."""
 from html.parser import HTMLParser
 from html import escape
 import re
 
 from markdown_engine import render_markdown
+from images import PreviewImage
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -29,12 +30,14 @@ class MarkdownText(HTMLParser):
         self.cell_align = 0.0
         self.trailing_newlines = 0
         self.links = {}
+        self.images = {}
 
     def add(self, text):
         if text:
             styles = tuple(self.STYLES[tag] for tag, _attrs in self.stack if tag in self.STYLES)
             styles += tuple(attrs["_link"] for tag, attrs in self.stack
                             if tag == "a" and "_link" in attrs)
+            styles += tuple(attrs["key"] for tag, attrs in self.stack if tag == "image-marker")
             if self.cell is not None:
                 self.cell.append((text, styles))
             elif self.table is None:
@@ -88,7 +91,11 @@ class MarkdownText(HTMLParser):
             self.add("────────────")
             self.newline(2)
         elif tag == "img":
+            key = f"image:{len(self.images)}"
+            self.images[key] = (attrs.get("src", ""), attrs.get("alt", ""), attrs.get("title", ""))
+            self.stack.append(("image-marker", {"key": key}))
             self.add(f"[Image: {attrs.get('alt') or 'image'}]")
+            self.stack.pop()
         else:
             self.stack.append((tag, attrs))
 
@@ -156,6 +163,12 @@ class MarkdownPreview(Gtk.TextView):
                          hexpand=True, vexpand=True)
         self.update_property([Gtk.AccessibleProperty.LABEL], ["Markdown preview"])
         self.table_widgets = []
+        self.image_widgets = []
+        self.inline_images = []
+        self.remote_images_allowed = set()
+        self.document_uri = None
+        self.images = {}
+        self.connect("destroy", self.cleanup_images)
         self.link_tags = {}
         self.links = {}
         self.press_position = None
@@ -252,9 +265,41 @@ class MarkdownPreview(Gtk.TextView):
                 return True
         return False
 
-    def render(self, source, *, tables=True):
+    def cleanup_images(self, *_args):
+        for image in self.image_widgets:
+            image.detach()
+        self.image_widgets.clear()
+
+    def make_image(self, key, styles, *, in_table=False):
+        source, alt, title = self.images[key]
+        width = min(480, max(120, self.get_width() - 48)) if self.get_width() else 480
+        image = PreviewImage(source, alt, title, self.document_uri,
+                             self.remote_images_allowed,
+                             max_width=160 if in_table else width,
+                             max_height=120 if in_table else 320)
+        self.image_widgets.append(image)
+        destination = next((self.links[s][0] for s in styles if s in self.links), None)
+        if destination is not None:
+            button = Gtk.Button(halign=Gtk.Align.START)
+            image.remove(image.picture)
+            button.set_child(image.picture)
+            button.set_has_frame(False)
+            image.picture.bind_property("visible", button, "visible", GObject.BindingFlags.SYNC_CREATE)
+            button.set_tooltip_text(destination)
+            button.connect("clicked", lambda _button: self.emit("link-activated", destination))
+            image.prepend(button)
+            image.link_button = button
+        return image
+
+    def render(self, source, *, tables=True, document_uri=None):
         parsed = parse_markdown(source, tables=tables)
+        self.cleanup_images()
+        self.images = parsed.images
+        self.document_uri = document_uri
         buffer = self.get_buffer()
+        for widget in self.inline_images:
+            self.remove(widget)
+        self.inline_images.clear()
         for widget in self.table_widgets:
             self.remove(widget)
         self.table_widgets.clear()
@@ -268,7 +313,17 @@ class MarkdownPreview(Gtk.TextView):
         self.link_leave(None)
         for text, styles in parsed.runs:
             start = buffer.get_char_count()
-            if styles and styles[0].startswith("table:"):
+            image_key = next((s for s in styles if s in self.images), None)
+            if image_key is not None:
+                anchor = buffer.create_child_anchor(buffer.get_end_iter())
+                widget = self.make_image(image_key, styles)
+                self.add_child_at_anchor(widget, anchor)
+                self.inline_images.append(widget)
+                for style in styles:
+                    if style in self.links:
+                        buffer.apply_tag_by_name(style, buffer.get_iter_at_offset(start),
+                                                 buffer.get_end_iter())
+            elif styles and styles[0].startswith("table:"):
                 anchor = buffer.create_child_anchor(buffer.get_end_iter())
                 grid = self.make_table(parsed.tables[int(styles[0].split(":")[1])])
                 self.add_child_at_anchor(grid, anchor)
@@ -285,41 +340,32 @@ class MarkdownPreview(Gtk.TextView):
         cell_style.load_from_string(
             "frame { border-radius: 0; }"
             "frame.alternate-row { background-color: alpha(currentColor, 0.05); }")
-        markup_tags = {"bold": "b", "italic": "i", "code": "tt"}
         for y, row in enumerate(rows):
             for x, (runs, header, align) in enumerate(row):
-                parts = []
-                for text, styles in runs:
-                    text = escape(text)
-                    for style in styles:
-                        tag = markup_tags.get(style)
-                        if tag:
-                            text = f"<{tag}>{text}</{tag}>"
-                        elif style in self.links:
-                            href, title = self.links[style]
-                            title_attr = f' title="{escape(title, quote=True)}"' if title else ""
-                            text = f'<a href="{escape(href, quote=True)}"{title_attr}>{text}</a>'
-                    parts.append(text)
-                markup = "".join(parts)
-                if header:
-                    markup = f"<b>{markup}</b>"
-                justification = {0.0: Gtk.Justification.LEFT,
-                                 0.5: Gtk.Justification.CENTER,
-                                 1.0: Gtk.Justification.RIGHT}[align]
-                label = Gtk.Label(xalign=align, justify=justification,
-                                  hexpand=True, halign=Gtk.Align.FILL,
-                                  yalign=0, selectable=True, wrap=True,
-                                  wrap_mode=Pango.WrapMode.WORD_CHAR,
-                                  max_width_chars=60, margin_start=10, margin_end=10,
-                                  margin_top=8, margin_bottom=8)
-                label.set_markup(markup)
-                label.connect("activate-link", self.table_link_activated)
+                image_runs = any(s in self.images for _text, styles in runs for s in styles)
+                if image_runs:
+                    content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4,
+                                      margin_start=10, margin_end=10, margin_top=8, margin_bottom=8)
+                    text_runs = []
+                    for text, styles in runs:
+                        key = next((s for s in styles if s in self.images), None)
+                        if key:
+                            if text_runs:
+                                content.append(self.cell_label(text_runs, header, align))
+                                text_runs = []
+                            content.append(self.make_image(key, styles, in_table=True))
+                        else:
+                            text_runs.append((text, styles))
+                    if text_runs:
+                        content.append(self.cell_label(text_runs, header, align))
+                else:
+                    content = self.cell_label(runs, header, align)
                 frame = Gtk.Frame()
                 if not header and y % 2 == 0:
                     frame.add_css_class("alternate-row")
                 frame.get_style_context().add_provider(
                     cell_style, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-                frame.set_child(label)
+                frame.set_child(content)
                 # TextView anchors allocate minimum widths, so reserve each
                 # cell natural width rather than its one-character wrap minimum.
                 _minimum, natural, _min_baseline, _nat_baseline = frame.measure(
@@ -327,3 +373,33 @@ class MarkdownPreview(Gtk.TextView):
                 frame.set_size_request(natural, -1)
                 grid.attach(frame, x, y, 1, 1)
         return grid
+
+    def cell_label(self, runs, header, align):
+        markup_tags = {"bold": "b", "italic": "i", "code": "tt"}
+        parts = []
+        for text, styles in runs:
+            text = escape(text)
+            for style in styles:
+                tag = markup_tags.get(style)
+                if tag:
+                    text = f"<{tag}>{text}</{tag}>"
+                elif style in self.links:
+                    href, title = self.links[style]
+                    title_attr = f' title="{escape(title, quote=True)}"' if title else ""
+                    text = f'<a href="{escape(href, quote=True)}"{title_attr}>{text}</a>'
+            parts.append(text)
+        markup = "".join(parts)
+        if header:
+            markup = f"<b>{markup}</b>"
+        justification = {0.0: Gtk.Justification.LEFT,
+                         0.5: Gtk.Justification.CENTER,
+                         1.0: Gtk.Justification.RIGHT}[align]
+        label = Gtk.Label(xalign=align, justify=justification,
+                          hexpand=True, halign=Gtk.Align.FILL,
+                          yalign=0, selectable=True, wrap=True,
+                          wrap_mode=Pango.WrapMode.WORD_CHAR,
+                          max_width_chars=60, margin_start=10, margin_end=10,
+                          margin_top=8, margin_bottom=8)
+        label.set_markup(markup)
+        label.connect("activate-link", self.table_link_activated)
+        return label

@@ -29,7 +29,6 @@ class MyNotesWindow(Adw.ApplicationWindow):
         header.pack_end(Gtk.Button(label="Save", action_name="win.save"))
         menu = Gio.Menu()
         menu.append("Save As…", "win.save-as")
-        menu.append("Show Preview", "win.preview")
         menu.append("Enable GitHub Flavored Markdown (GFM)", "win.tables")
         self.tables_action = Gio.SimpleAction.new_stateful("tables", None, GLib.Variant("b", True))
         self.tables_action.connect("activate", self.toggle_tables)
@@ -117,7 +116,8 @@ class MyNotesWindow(Adw.ApplicationWindow):
 
     def refresh_preview(self):
         self.cleanup_preview()
-        self.preview.render(self.text(), tables=self.tables_action.get_state().get_boolean())
+        self.preview.render(self.text(), tables=self.tables_action.get_state().get_boolean(),
+                            document_uri=self.file.get_uri() if self.file else None)
         return GLib.SOURCE_REMOVE
 
     def text(self):
@@ -288,6 +288,7 @@ class MyNotesWindow(Adw.ApplicationWindow):
                 self.error("Could not save note", error)
                 return
             self.file, self.etag = file, new_etag
+            self.refresh_preview()
             self.buffer.set_modified(False)
             self.set_busy(False)
             self.update_status()

@@ -3,7 +3,7 @@
   "fixture_source": "https://spec.commonmark.org/0.31.2/spec.json",
   "fixture_sha256": "d431b29d97b6f73e69d547109cf5081578fac931e72afe95639ebe766c1b2a20",
   "parser": "markdown-it-py 4.0.0, CommonMark",
-  "checked_at_utc": "2026-10-26T21:48:58.902609+00:00",
+  "checked_at_utc": "2026-10-26T22:16:01.740891+00:00",
   "total": 652,
   "passed": 652,
   "failed": 0,

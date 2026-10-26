@@ -42,14 +42,13 @@ are used exactly as entered.
 ## Live Markdown preview
 
 The preview appears beside the editor and updates shortly after typing stops.
-Drag the divider to adjust the pane widths. Use the **Preview** button, the
-**Show Preview** menu item, or `Ctrl+Shift+P` to show or hide it.
+Drag the divider to adjust the pane widths. Use the **Preview** button or `Ctrl+Shift+P` to show or hide it.
 
 The native GTK preview renders headings, bold and italic text, lists,
 blockquotes, inline and fenced code, and tables. Links are clickable, and
-images appear as descriptions. Rendering does not run scripts or fetch
-remote content. Raw HTML is not a full browser layout.
-Syntax highlighting, rendered images, and the file organiser remain future work.
+images render in the preview. Rendering does not run scripts. Remote images
+load only after you click **Load image**. Raw HTML is not a full browser layout.
+Syntax highlighting and the file organiser remain future work.
 
 ## CommonMark compatibility
 
@@ -58,7 +57,7 @@ The parser uses markdown-it-py in its CommonMark configuration. The optional
 previews; turn it off to use core CommonMark syntax without the table extension.
 
 Parser compliance and GTK preview completeness are separate. The official
-Markdown-to-HTML tests verify the parser. Images remain descriptions and raw HTML has limited
+Markdown-to-HTML tests verify the parser. Raw HTML still has limited
 native rendering. Passing the parser tests does not certify full preview
 conformance. See `docs/commonmark-audit.md` for measured results and limitations.
 
@@ -82,6 +81,31 @@ an application convenience rather than a CommonMark syntax requirement.
 
 HTTP, HTTPS, mailto and file destinations are supported. Unsupported schemes
 produce a message. Open `examples/links-demo.md` to try the feature.
+
+## Images
+
+Use `![Description](path/to/image.png "Optional title")`. Local images load
+automatically, with relative paths resolved from the saved note's folder.
+Save an untitled note first to resolve relative images. File URLs,
+reference-style images, images inside tables, and images wrapped in links
+are supported. Save As refreshes the preview against the new folder.
+
+Images are loaded in the background, keep their aspect ratio, and are reduced
+to at most 480 × 320 pixels (160 × 120 inside tables). The available preview
+width may reduce the image further when it is rendered. Supported formats
+depend on GdkPixbuf; PNG, JPEG and SVG work on the development VM. Animated
+formats display a static frame.
+
+HTTP and HTTPS images show **Load image** first. Clicking it allows that URL
+for this preview session, and recently loaded images are cached in memory.
+There is a 10 MB limit per source image and a network timeout. Missing,
+unsupported or unreadable images show their description and an error tooltip.
+Alt descriptions remain available to assistive technology for loaded images.
+Open `examples/images-demo.md` to try the included local sample.
+
+GTK 4.18 may log `Trying to snapshot GtkGizmo ... without a current allocation`
+during rapid scrolling or resizing. This was traced to a scrollbar and remains
+unresolved; image/editor regression checks pass despite the warning.
 
 Tables support formatted cells and column alignment:
 
@@ -109,6 +133,7 @@ PYTHONPATH=. .venv/bin/python tests/check_editor.py
 PYTHONPATH=. .venv/bin/python tests/check_preview.py
 PYTHONPATH=. .venv/bin/python tests/check_table_layout.py
 PYTHONPATH=. .venv/bin/python tests/check_links.py
+PYTHONPATH=. .venv/bin/python tests/check_images.py
 .venv/bin/python tests/check_commonmark.py
 PYTHONPATH=. .venv/bin/python tests/check_commonmark_preview.py
 ```

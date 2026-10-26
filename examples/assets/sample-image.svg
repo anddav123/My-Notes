@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="320" viewBox="0 0 800 320">
+  <rect width="800" height="320" fill="#24456b"/>
+  <rect x="40" y="40" width="180" height="240" rx="12" fill="#78bdd1"/>
+  <path d="M80 100h100M80 140h100M80 180h70" stroke="#24456b" stroke-width="12" stroke-linecap="round"/>
+  <text x="260" y="150" fill="white" font-family="sans-serif" font-size="48" font-weight="bold">My Notes</text>
+  <text x="260" y="205" fill="#d1e6ef" font-family="sans-serif" font-size="26">Markdown image preview</text>
+</svg>
