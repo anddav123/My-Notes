@@ -1,6 +1,6 @@
 # GFM preview demo
 
-Use **Enable GitHub Flavored Markdown (GFM)** in the menu to compare modes.
+Use **Preferences → Markdown → GitHub Flavoured Markdown (GFM)** to compare modes.
 Turning it off restores core CommonMark interpretation for all these features.
 
 ## Task lists

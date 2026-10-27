@@ -21,7 +21,7 @@ with tempfile.TemporaryDirectory() as directory:
     assert prefs.button_style == 'text'
     assert not path.exists()
     prefs.set_button_style('icons')
-    assert json.loads(path.read_text()) == {'button_style': 'icons'}
+    assert json.loads(path.read_text()) == {'button_style': 'icons', 'gfm_enabled': True}
     assert ButtonPreferences(path).button_style == 'icons'
     assert not list(path.parent.glob('*.tmp'))
     prefs.set_button_style('text')

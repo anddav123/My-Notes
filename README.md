@@ -2,6 +2,14 @@
 
 A Python GTK4/Libadwaita Markdown editor for GNOME.
 
+## Machine-wide Debian package
+
+A Debian 13 amd64 package can be built with `python3 tools/build_deb.py`.
+The initial version is `0.1.0-1`. It installs the app, private pinned dependencies,
+GNOME launcher and icon system-wide while keeping notes/preferences per user.
+See [packaging/README.md](packaging/README.md) for installation, switching from
+the development launcher, verification, source archives and supported platforms.
+
 ## Run on Debian 13
 
 Install the runtime dependencies:
@@ -76,14 +84,59 @@ Syntax highlighting and the file organiser remain future work.
 
 ## CommonMark compatibility
 
-With **Enable GitHub Flavored Markdown (GFM)** turned off, the parser uses
+With **Preferences → Markdown → GitHub Flavoured Markdown (GFM)** turned off, the parser uses
 markdown-it-py in its tested CommonMark configuration. With it turned on,
 GitHub's reference parser enables all five GFM extensions together. The status
-bar shows the current mode. GFM is enabled initially.
+bar shows the current mode. GFM is enabled initially and the choice is saved per user.
+
+## Undo and redo
+
+Use **Undo** and **Redo** in the menu, or **Ctrl+Z** to undo and
+**Ctrl+Shift+Z / Ctrl+Y** to redo. Commands are unavailable when their respective
+history is empty and are disabled during file operations.
+
+GTK groups ordinary typing/deletion into native undo steps. Each Replace and
+the whole Replace All operation form explicit single steps. Search, selection
+and view changes do not create document edits. Saving keeps edit history;
+New and Open clear it so history cannot cross document boundaries. A fresh edit
+after Undo discards the unused Redo branch.
+
+Undo/Redo from Preview-only mode reveals the editor alongside the preview.
+The preview and unsaved-change indicator follow the result. Search and
+replacement text fields keep their own native text undo when focused.
+
+## Find and replace
+
+Use **Find…** or **Find and Replace…** in the menu:
+
+- **Ctrl+F**: open Find and focus the search field.
+- **Ctrl+H**: open Find and Replace.
+- **Enter / Shift+Enter** in the search field: next / previous match.
+- **F3 / Shift+F3** or **Ctrl+G / Ctrl+Shift+G**: next / previous match.
+- **Esc** in the search panel: close it and return to the editor.
+
+Matches are highlighted in the Markdown source with a current/total count.
+Search wraps at the start/end of the document. **Match case** switches between
+case-insensitive and case-sensitive matching. Searches and replacement text
+are literal; regular expressions and replacement escape sequences are not used.
+
+**Replace** changes the selected match, then selects the following one.
+If the source selection has moved elsewhere, the first Replace locates the
+next match without changing unrelated text. **Replace All** changes every
+non-overlapping match once; it does not recursively replace newly inserted text.
+An empty replacement deletes matches. Changes update the preview and mark the
+note as modified. In the editor, **Ctrl+Z** undoes a replacement operation or an
+entire Replace All operation in one step.
+
+Opening search in Preview-only mode shows the editor alongside the preview.
+The search field receives focus, and the preview remains visible. Hiding the
+editor closes its search panel. Closing search does not revert the viewing mode.
+Opening a different note or creating a new one clears undo history so an old
+document cannot be restored accidentally into the new document.
 
 ## Preferences
 
-Open **Preferences** from the menu or press `Ctrl+,`. Under **Toolbar**, choose
+Open **Preferences** from the menu or press `Ctrl+,`. On **Appearance**, under **Toolbar**, choose
 **Text** (the default) or **Icons**. New, Open, Save, Editor and Preview update
 immediately, including in other open windows. Icon buttons retain their
 tooltips, accessible labels, keyboard shortcuts and toggle states.
@@ -97,7 +150,7 @@ save is reported without changing the current preference.
 
 GFM mode adds tables, task lists, single/double-tilde strikethrough, automatic
 links for bare URLs and email addresses, and GFM's disallowed-HTML tag filter.
-Turn the menu switch off to restore core CommonMark interpretation of all
+Turn the switch off in **Preferences → Markdown** to restore core CommonMark interpretation of all
 these features at once. The source is never rewritten by the switch.
 
 Tasks use `- [ ]` for incomplete and `- [x]` or `- [X]` for complete. Preview
@@ -206,6 +259,8 @@ PYTHONPATH=. .venv/bin/python tests/check_lists_quotes.py
 PYTHONPATH=. .venv/bin/python tests/check_gfm.py
 PYTHONPATH=. .venv/bin/python tests/check_view_modes.py
 PYTHONPATH=. .venv/bin/python tests/check_preferences.py
+PYTHONPATH=. .venv/bin/python tests/check_find_replace.py
+PYTHONPATH=. .venv/bin/python tests/check_undo_redo.py
 .venv/bin/python tests/check_commonmark.py
 PYTHONPATH=. .venv/bin/python tests/check_commonmark_preview.py
 ```

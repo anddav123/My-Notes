@@ -1,3 +1,4 @@
+import tempfile
 """Structural and allocated-layout checks for CommonMark lists and quotes."""
 from pathlib import Path
 import time
@@ -45,7 +46,8 @@ source = '''Normal text.
 
 Ordinary ending.
 '''
-app = MyNotesApp()
+test_preferences = tempfile.TemporaryDirectory(prefix="my-notes-test-")
+app = MyNotesApp(preferences_path=Path(test_preferences.name) / "preferences.json")
 app.set_flags(Gio.ApplicationFlags.NON_UNIQUE)
 app.register(None)
 w = MyNotesWindow(app)

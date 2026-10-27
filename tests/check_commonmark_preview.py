@@ -1,3 +1,4 @@
+import tempfile
 """GTK regression and smoke checks; this is not full visual conformance."""
 import json
 from pathlib import Path
@@ -21,7 +22,8 @@ table = "| A | B |\n| --- | --- |\n| 1 | 2 |\n"
 assert not parse_markdown(table, tables=False).tables
 assert len(parse_markdown(table, tables=True).tables) == 1
 
-app = MyNotesApp()
+test_preferences = tempfile.TemporaryDirectory(prefix="my-notes-test-")
+app = MyNotesApp(preferences_path=Path(test_preferences.name) / "preferences.json")
 app.set_flags(Gio.ApplicationFlags.NON_UNIQUE)
 app.register(None)
 window = MyNotesWindow(app)

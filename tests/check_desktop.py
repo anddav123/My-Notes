@@ -39,7 +39,8 @@ with tempfile.TemporaryDirectory() as directory:
     else:
         raise AssertionError("Unmanaged launcher was overwritten")
 
-app = MyNotesApp()
+test_preferences = tempfile.TemporaryDirectory(prefix="my-notes-test-")
+app = MyNotesApp(preferences_path=Path(test_preferences.name) / "preferences.json")
 app.set_flags(Gio.ApplicationFlags.NON_UNIQUE)
 app.register(None)
 assert Gtk.Window.get_default_icon_name() == installer.APP_ID

@@ -4,7 +4,7 @@ GFM mode uses cmarkgfm 2025.10.22, Python bindings to GitHub's reference parser.
 Core CommonMark mode continues to use markdown-it-py 4.0.0 and passes all
 652 official CommonMark 0.31.2 examples.
 
-The single **Enable GitHub Flavored Markdown (GFM)** switch controls:
+The **GitHub Flavoured Markdown (GFM)** switch in **Preferences → Markdown** controls:
 
 - Tables, retaining the app's alignment, sizing and alternating row colours.
 - Task-list checkboxes, including nested and completed tasks.

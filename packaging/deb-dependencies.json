@@ -1,0 +1,75 @@
+{
+  "target": "Debian 13 amd64 / CPython 3.13",
+  "dependencies": [
+    {
+      "name": "markdown-it-py",
+      "version": "4.0.0",
+      "wheel": {
+        "filename": "markdown_it_py-4.0.0-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/94/54/e7d793b573f298e1c9013b8c4dade17d481164aa517d1d7148619c2cedbf/markdown_it_py-4.0.0-py3-none-any.whl",
+        "sha256": "87327c59b172c5011896038353a81343b6754500a08cd7a4973bb48c6d578147"
+      },
+      "source": {
+        "filename": "markdown_it_py-4.0.0.tar.gz",
+        "url": "https://files.pythonhosted.org/packages/5b/f5/4ec618ed16cc4f8fb3b701563655a69816155e79e24a17b651541804721d/markdown_it_py-4.0.0.tar.gz",
+        "sha256": "cb0a2b4aa34f932c007117b194e945bd74e0ec24133ceb5bac59009cda1cb9f3"
+      }
+    },
+    {
+      "name": "mdurl",
+      "version": "0.1.2",
+      "wheel": {
+        "filename": "mdurl-0.1.2-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl",
+        "sha256": "84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8"
+      },
+      "source": {
+        "filename": "mdurl-0.1.2.tar.gz",
+        "url": "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz",
+        "sha256": "bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba"
+      }
+    },
+    {
+      "name": "cmarkgfm",
+      "version": "2025.10.22",
+      "wheel": {
+        "filename": "cmarkgfm-2025.10.22-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+        "url": "https://files.pythonhosted.org/packages/00/8c/c728c4129a285bd5fb10225e69089f96313e5b0529fc423514625fed9e1f/cmarkgfm-2025.10.22-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+        "sha256": "77840ddd24152881c2d374eae5e1baca462d24c2d78a937b6f30a12c2685cc0c"
+      },
+      "source": {
+        "filename": "cmarkgfm-2025.10.22.tar.gz",
+        "url": "https://files.pythonhosted.org/packages/8f/0c/5010c87ceba51854dad42f45a3d28a3c67e81a21cfed8b20c34688aaa1b6/cmarkgfm-2025.10.22.tar.gz",
+        "sha256": "5bec61007b65b919488442c838c58a6c8bf4741f5103c593b2ef180d39818eda"
+      }
+    },
+    {
+      "name": "cffi",
+      "version": "2.0.0",
+      "wheel": {
+        "filename": "cffi-2.0.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "url": "https://files.pythonhosted.org/packages/98/df/0a1755e750013a2081e863e7cd37e0cdd02664372c754e5560099eb7aa44/cffi-2.0.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "sha256": "c8d3b5532fc71b7a77c09192b4a5a200ea992702734a2e9279a37f2478236f26"
+      },
+      "source": {
+        "filename": "cffi-2.0.0.tar.gz",
+        "url": "https://files.pythonhosted.org/packages/eb/56/b1ba7935a17738ae8453301356628e8147c79dbb825bcbc73dc7401f9846/cffi-2.0.0.tar.gz",
+        "sha256": "44d1b5909021139fe36001ae048dbdde8214afa20200eda0f64c068cac5d5529"
+      }
+    },
+    {
+      "name": "pycparser",
+      "version": "2.23",
+      "wheel": {
+        "filename": "pycparser-2.23-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/a0/e3/59cd50310fc9b59512193629e1984c1f95e5c8ae6e5d8c69532ccc65a7fe/pycparser-2.23-py3-none-any.whl",
+        "sha256": "e5c6e8d3fbad53479cab09ac03729e0a9faf2bee3db8208a550daf5af81a5934"
+      },
+      "source": {
+        "filename": "pycparser-2.23.tar.gz",
+        "url": "https://files.pythonhosted.org/packages/fe/cf/d2d3b9f5699fb1e4615c8e32ff220203e43b248e1dfcc6736ad9057731ca/pycparser-2.23.tar.gz",
+        "sha256": "78816d4f24add8f10a06d6f05b4d424ad9e96cfebf68a4ddc99c65c0720d00c2"
+      }
+    }
+  ]
+}

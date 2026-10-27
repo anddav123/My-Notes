@@ -55,8 +55,8 @@ Known gaps include:
   of every official example or every possible container combination.
 - Code-block language metadata is not exposed in the UI.
 
-GFM mode is optional and initially enabled. Turn off **Enable GitHub Flavored
-Markdown (GFM)** in the menu for core CommonMark interpretation. The strict
+GFM mode is optional and initially enabled. Turn off **GitHub Flavoured Markdown
+(GFM)** in **Preferences → Markdown** for core CommonMark interpretation. The strict
 suite tests the shared parsing entry point with GFM disabled. GFM uses GitHub's
 reference parser for its five extensions and has separate parser and native
 preview checks; see `docs/gfm-audit.md` for measured results and known gaps.

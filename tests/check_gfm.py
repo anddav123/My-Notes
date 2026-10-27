@@ -1,3 +1,5 @@
+from pathlib import Path
+import tempfile
 """GTK GFM feature and mode-switch regression tests."""
 import time
 from main import MyNotesApp, MyNotesWindow, Gio, GLib
@@ -38,7 +40,8 @@ strict = parse_markdown(source, gfm=False)
 assert not strict.tasks and not strict.tables and not strict.links
 assert not any('strike' in styles for _text, styles in strict.runs)
 
-app = MyNotesApp()
+test_preferences = tempfile.TemporaryDirectory(prefix="my-notes-test-")
+app = MyNotesApp(preferences_path=Path(test_preferences.name) / "preferences.json")
 app.set_flags(Gio.ApplicationFlags.NON_UNIQUE)
 app.register(None)
 w = MyNotesWindow(app)

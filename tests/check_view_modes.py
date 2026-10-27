@@ -1,3 +1,5 @@
+from pathlib import Path
+import tempfile
 """Verify linked pane controls and displayed one/two-pane layouts."""
 import time
 from main import MyNotesApp, MyNotesWindow, Gio, GLib, Gtk
@@ -10,7 +12,8 @@ def settle():
         time.sleep(.005)
 
 
-app = MyNotesApp()
+test_preferences = tempfile.TemporaryDirectory(prefix="my-notes-test-")
+app = MyNotesApp(preferences_path=Path(test_preferences.name) / "preferences.json")
 app.set_flags(Gio.ApplicationFlags.NON_UNIQUE)
 app.register(None)
 w = MyNotesWindow(app)
@@ -24,7 +27,7 @@ settle()
 
 def buttons(widget):
     result = []
-    if isinstance(widget, Gtk.ToggleButton) and widget.get_label() in ('Editor', 'Preview'):
+    if isinstance(widget, Gtk.ToggleButton) and widget.get_action_name() in ('win.editor', 'win.preview'):
         result.append(widget)
     child = widget.get_first_child()
     while child:
@@ -33,7 +36,7 @@ def buttons(widget):
     return result
 
 
-controls = {button.get_label(): button for button in buttons(w)}
+controls = {({'win.editor': 'Editor', 'win.preview': 'Preview'}[button.get_action_name()]): button for button in buttons(w)}
 assert set(controls) == {'Editor', 'Preview'}
 
 

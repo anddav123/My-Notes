@@ -1,3 +1,5 @@
+from pathlib import Path
+import tempfile
 """GTK integration checks for live Markdown preview and tables."""
 import time
 
@@ -53,7 +55,8 @@ assert parsed.tables[0][1][2][2] == 0.5
 assert "bold" in parsed.tables[0][1][0][0][0][1]
 assert "alert" not in "".join(t for t, _s in parse_markdown('<script>alert(1)</script>', gfm=False).runs)
 
-app = MyNotesApp()
+test_preferences = tempfile.TemporaryDirectory(prefix="my-notes-test-")
+app = MyNotesApp(preferences_path=Path(test_preferences.name) / "preferences.json")
 app.set_flags(Gio.ApplicationFlags.NON_UNIQUE)
 app.register(None)
 window = MyNotesWindow(app)

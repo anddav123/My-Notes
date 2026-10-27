@@ -11,6 +11,7 @@ from gi.repository import Adw, Gio, GLib, Gtk, Gdk
 from preview import MarkdownPreview
 from links import resolve_link
 from preferences import ButtonPreferences
+from find_replace import FindReplaceBar
 
 
 class MyNotesWindow(Adw.ApplicationWindow):
@@ -26,6 +27,7 @@ class MyNotesWindow(Adw.ApplicationWindow):
         self.styled_buttons = []
         self.preferences_dialog = None
         self.button_style_row = None
+        self.gfm_row = None
 
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
@@ -43,9 +45,15 @@ class MyNotesWindow(Adw.ApplicationWindow):
         header.pack_start(self.file_controls)
         menu = Gio.Menu()
         menu.append("Save As…", "win.save-as")
-        menu.append("Enable GitHub Flavored Markdown (GFM)", "win.gfm")
+        for label, action, shortcut in (("Undo", "win.undo", "<primary>z"),
+                                         ("Redo", "win.redo", "<primary><shift>z")):
+            item = Gio.MenuItem.new(label, action)
+            item.set_attribute_value("accel", GLib.Variant("s", shortcut))
+            menu.append_item(item)
+        menu.append("Find…", "win.find")
+        menu.append("Find and Replace…", "win.find-replace")
         menu.append("Preferences", "win.preferences")
-        self.gfm_action = Gio.SimpleAction.new_stateful("gfm", None, GLib.Variant("b", True))
+        self.gfm_action = Gio.SimpleAction.new_stateful("gfm", None, GLib.Variant("b", app.preferences.gfm_enabled))
         self.gfm_action.connect("activate", self.toggle_gfm)
         self.add_action(self.gfm_action)
         self.preview_action = Gio.SimpleAction.new_stateful("preview", None, GLib.Variant("b", True))
@@ -66,7 +74,7 @@ class MyNotesWindow(Adw.ApplicationWindow):
         header.pack_end(view_controls)
         toolbar.add_top_bar(header)
 
-        self.buffer = Gtk.TextBuffer()
+        self.buffer = Gtk.TextBuffer(enable_undo=True)
         self.editor = Gtk.TextView(
             buffer=self.buffer, monospace=True, wrap_mode=Gtk.WrapMode.WORD_CHAR,
             left_margin=24, right_margin=24, top_margin=24, bottom_margin=24,
@@ -99,6 +107,10 @@ class MyNotesWindow(Adw.ApplicationWindow):
         self.toasts.set_child(self.panes)
         toolbar.set_content(self.toasts)
         self.set_content(toolbar)
+        self.find_bar = FindReplaceBar(self.editor)
+        self.find_bar.connect("replaced", lambda _bar, count: self.toasts.add_toast(
+            Adw.Toast(title=f"Replaced {count} match" if count == 1 else f"Replaced {count} matches")))
+        toolbar.add_top_bar(self.find_bar)
 
         for name, callback, shortcuts in (
             ("new", self.new_document, ["<primary>n"]),
@@ -106,6 +118,12 @@ class MyNotesWindow(Adw.ApplicationWindow):
             ("save", self.save_document, ["<primary>s"]),
             ("save-as", lambda: self.save_document(save_as=True), ["<primary><shift>s"]),
             ("preferences", self.show_preferences, ["<primary>comma"]),
+            ("find", lambda: self.open_find(False), ["<primary>f"]),
+            ("find-replace", lambda: self.open_find(True), ["<primary>h"]),
+            ("find-next", lambda: self.navigate_find(1), ["F3", "<primary>g"]),
+            ("find-previous", lambda: self.navigate_find(-1), ["<shift>F3", "<primary><shift>g"]),
+            ("undo", lambda: self.undo_redo(False), ["<primary>z"]),
+            ("redo", lambda: self.undo_redo(True), ["<primary><shift>z", "<primary>y"]),
         ):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", lambda _a, _p, cb=callback: cb())
@@ -114,13 +132,44 @@ class MyNotesWindow(Adw.ApplicationWindow):
         self.buffer.connect("changed", self.update_status)
         self.buffer.connect("modified-changed", self.update_status)
         self.buffer.connect("changed", self.schedule_preview)
+        self.buffer.connect("notify::can-undo", self.update_undo_actions)
+        self.buffer.connect("notify::can-redo", self.update_undo_actions)
         self.connect("destroy", self.cleanup_preview)
         self.connect("close-request", self.on_close_request)
         self.preference_handler = app.preferences.connect("notify::button-style", self.apply_button_style)
-        self.connect("destroy", lambda _window: app.preferences.disconnect(self.preference_handler))
+        self.gfm_preference_handler = app.preferences.connect("notify::gfm-enabled", self.apply_gfm_preference)
+        self.connect("destroy", lambda _window: (
+            app.preferences.disconnect(self.preference_handler),
+            app.preferences.disconnect(self.gfm_preference_handler)))
         self.apply_button_style()
         self.update_status()
+        self.update_undo_actions()
         self.refresh_preview()
+
+    def update_undo_actions(self, *_args):
+        self.lookup_action("undo").set_enabled(not self.busy and self.buffer.get_can_undo())
+        self.lookup_action("redo").set_enabled(not self.busy and self.buffer.get_can_redo())
+
+    def undo_redo(self, redo=False):
+        if self.busy:
+            return
+        focus = self.get_focus()
+        # Search/replacement fields keep their own ordinary text undo. A
+        # shortcut there must not unexpectedly edit the Markdown document.
+        if isinstance(focus, Gtk.Editable):
+            focus.activate_action("text.redo" if redo else "text.undo", None)
+            return
+        available = self.buffer.get_can_redo() if redo else self.buffer.get_can_undo()
+        if not available:
+            return
+        if not self.editor_scroll.get_visible():
+            self.set_view(True, self.preview_scroll.get_visible())
+        if redo:
+            self.buffer.redo()
+        else:
+            self.buffer.undo()
+        self.focus_document()
+        self.update_undo_actions()
 
     def toolbar_button(self, label, icon, action, *, toggle=False):
         button_type = Gtk.ToggleButton if toggle else Gtk.Button
@@ -130,6 +179,20 @@ class MyNotesWindow(Adw.ApplicationWindow):
         button.update_property([Gtk.AccessibleProperty.LABEL], [label])
         self.styled_buttons.append((button, label, icon))
         return button
+
+    def open_find(self, replace=False):
+        if self.busy:
+            return
+        if not self.editor_scroll.get_visible():
+            self.set_view(True, self.preview_scroll.get_visible())
+        self.find_bar.open(replace=replace)
+
+    def navigate_find(self, direction):
+        if self.busy:
+            return
+        if not self.find_bar.get_visible():
+            self.open_find(False)
+        self.find_bar.navigate(direction)
 
     def apply_button_style(self, *_args):
         icons = self.get_application().preferences.button_style == "icons"
@@ -164,11 +227,26 @@ class MyNotesWindow(Adw.ApplicationWindow):
         group.add(row)
         page.add(group)
         dialog.add(page)
+        markdown_page = Adw.PreferencesPage(title="Markdown", icon_name="text-x-generic-symbolic")
+        markdown_group = Adw.PreferencesGroup(title="Formatting")
+        gfm_row = Adw.SwitchRow(title="GitHub Flavoured Markdown (GFM)",
+                               subtitle="Enable tables, task lists, strikethrough and automatic links",
+                               active=self.get_application().preferences.gfm_enabled)
+
+        def gfm_changed(_row, _property):
+            self.set_gfm_preference(gfm_row.get_active())
+
+        gfm_row.connect("notify::active", gfm_changed)
+        markdown_group.add(gfm_row)
+        markdown_page.add(markdown_group)
+        dialog.add(markdown_page)
+        self.gfm_row = gfm_row
         self.preferences_dialog, self.button_style_row = dialog, row
 
         def closed(_dialog):
             self.preferences_dialog = None
             self.button_style_row = None
+            self.gfm_row = None
 
         dialog.connect("closed", closed)
         dialog.present(self)
@@ -193,6 +271,9 @@ class MyNotesWindow(Adw.ApplicationWindow):
         self.preview_action.set_state(GLib.Variant("b", preview))
         self.editor_scroll.set_visible(editor)
         self.preview_scroll.set_visible(preview)
+        if not editor:
+            self.preview.grab_focus()
+            self.find_bar.close(focus_editor=False)
         if editor and preview:
             self.panes.set_position(self.split_position)
         if preview and not was_preview:
@@ -213,7 +294,21 @@ class MyNotesWindow(Adw.ApplicationWindow):
             self.preview.grab_focus()
 
     def toggle_gfm(self, action, _parameter):
-        action.set_state(GLib.Variant("b", not action.get_state().get_boolean()))
+        self.set_gfm_preference(not action.get_state().get_boolean())
+
+    def set_gfm_preference(self, enabled):
+        try:
+            self.get_application().preferences.set_gfm_enabled(enabled)
+        except (OSError, ValueError) as error:
+            if self.gfm_row:
+                self.gfm_row.set_active(self.get_application().preferences.gfm_enabled)
+            self.error("Could not save preferences", error)
+
+    def apply_gfm_preference(self, *_args):
+        enabled = self.get_application().preferences.gfm_enabled
+        self.gfm_action.set_state(GLib.Variant("b", enabled))
+        if self.gfm_row:
+            self.gfm_row.set_active(enabled)
         self.update_status()
         if self.preview_scroll.get_visible():
             self.refresh_preview()
@@ -274,10 +369,15 @@ class MyNotesWindow(Adw.ApplicationWindow):
         self.status.set_text(f"{mode}  ·  {len(text.split())} words  ·  {len(text)} characters")
 
     def set_busy(self, busy):
+        focus = self.get_focus()
+        if busy and focus and focus.is_ancestor(self.find_bar):
+            self.focus_document()
         self.busy = busy
         self.editor.set_editable(not busy)
-        for name in ("new", "open", "save", "save-as"):
+        for name in ("new", "open", "save", "save-as", "find", "find-replace", "find-next", "find-previous"):
             self.lookup_action(name).set_enabled(not busy)
+        self.find_bar.set_sensitive(not busy)
+        self.update_undo_actions()
 
     def error(self, heading, message):
         dialog = Adw.AlertDialog(heading=heading, body=str(message))
@@ -317,7 +417,9 @@ class MyNotesWindow(Adw.ApplicationWindow):
     def reset_document(self):
         self.file = None
         self.etag = None
+        self.buffer.begin_irreversible_action()
         self.buffer.set_text("")
+        self.buffer.end_irreversible_action()
         self.buffer.set_modified(False)
         self.update_status()
         self.focus_document()
@@ -366,7 +468,9 @@ class MyNotesWindow(Adw.ApplicationWindow):
             self.error("Could not open note", error)
             return
         self.file, self.etag = selected, etag
+        self.buffer.begin_irreversible_action()
         self.buffer.set_text(text)
+        self.buffer.end_irreversible_action()
         self.buffer.set_modified(False)
         self.set_busy(False)
         self.update_status()

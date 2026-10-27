@@ -1,3 +1,5 @@
+from pathlib import Path
+import tempfile
 """Link resolution and GTK activation tests without launching external apps."""
 import time
 
@@ -50,7 +52,8 @@ assert "Example" in plain and "(https://example.org)" not in plain
 assert any("bold" in styles and any(s.startswith("destination:") for s in styles)
            for _text, styles in parsed.runs)
 
-app = MyNotesApp()
+test_preferences = tempfile.TemporaryDirectory(prefix="my-notes-test-")
+app = MyNotesApp(preferences_path=Path(test_preferences.name) / "preferences.json")
 app.set_flags(Gio.ApplicationFlags.NON_UNIQUE)
 app.register(None)
 w = MyNotesWindow(app)
