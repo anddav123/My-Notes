@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=My Notes
+Comment=Write and preview Markdown notes
+Exec=/usr/bin/sh @RUN_SCRIPT@
+TryExec=/usr/bin/sh
+Icon=net.anddav.MyNotes
+Terminal=false
+StartupNotify=true
+StartupWMClass=net.anddav.MyNotes
+Categories=Utility;TextEditor;
+Keywords=Notes;Markdown;Editor;
+X-MyNotes-Managed=true

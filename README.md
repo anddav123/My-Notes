@@ -23,7 +23,27 @@ compatible versions. The project environment shares Debian's GTK bindings and
 pins its Markdown parser separately. After initial setup, use `sh run.sh` to
 launch My Notes. Running `python3 main.py` bypasses the tested environment.
 
-## Milestone 2: Markdown source editing
+## App icon and GNOME launcher
+
+Install the per-user launcher after setting up the project environment:
+
+```bash
+.venv/bin/python tools/install_desktop.py
+```
+
+My Notes then appears in GNOME's app grid. Search for **My Notes** to launch it,
+or right-click its app-grid icon and choose **Pin to Dash** (wording may vary)
+to keep it in the dock. The launcher uses this checkout's `run.sh` and tested
+Python environment; no terminal window or administrator permissions are needed.
+Close and reopen a running instance to pick up its new icon.
+
+The approved notebook/MY-arrow artwork is stored as a scalable SVG in
+`data/icons/hicolor/scalable/apps/`. The launcher template is in `data/`.
+The installer copies both into your user application/icon directories and
+can be rerun after icon changes or after moving the checkout. It deliberately
+does not register Markdown file associations yet; it launches the application.
+
+## Markdown source editing
 
 - Wrapped, monospace Markdown text editor with word and character counts.
 - New (`Ctrl+N`), Open (`Ctrl+O`), Save (`Ctrl+S`), and Save As

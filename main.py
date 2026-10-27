@@ -1,11 +1,13 @@
 """My Notes: a small GTK4 Markdown source editor."""
 import sys
+from pathlib import Path
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gio, GLib, Gtk
+gi.require_version("Gdk", "4.0")
+from gi.repository import Adw, Gio, GLib, Gtk, Gdk
 from preview import MarkdownPreview
 from links import resolve_link
 from preferences import ButtonPreferences
@@ -433,6 +435,14 @@ class MyNotesApp(Adw.Application):
     def __init__(self, preferences_path=None):
         super().__init__(application_id="net.anddav.MyNotes")
         self.preferences = ButtonPreferences(preferences_path)
+
+    def do_startup(self):
+        Adw.Application.do_startup(self)
+        display = Gdk.Display.get_default()
+        if display:
+            theme = Gtk.IconTheme.get_for_display(display)
+            theme.add_search_path(str(Path(__file__).resolve().parent / "data/icons"))
+        Gtk.Window.set_default_icon_name("net.anddav.MyNotes")
 
     def do_activate(self):
         window = self.props.active_window or MyNotesWindow(self)
