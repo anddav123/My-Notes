@@ -22,7 +22,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 LOCK = ROOT / "packaging/deb-dependencies.json"
 MODULES = ("main.py", "preview.py", "markdown_engine.py", "links.py", "images.py", "preferences.py",
-           "find_replace.py")
+           "find_replace.py", "recent_notes.py")
 
 
 def run(*args, **kwargs):

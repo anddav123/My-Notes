@@ -49,7 +49,11 @@ with tempfile.TemporaryDirectory() as directory:
         assert theme.has_icon(icon), f'Theme does not contain {icon}'
         assert button.get_icon_name() == icon
         assert button.get_tooltip_text()
-        assert button.get_action_name().startswith('win.')
+        if label == 'Open':
+            assert isinstance(button, Gtk.MenuButton)
+            assert button.get_popover() is w.recent_popover
+        else:
+            assert button.get_action_name().startswith('win.')
     assert ButtonPreferences(path).button_style == 'icons'
     assert w.text() == note and w.buffer.get_modified()
 

@@ -12,6 +12,7 @@ from preview import MarkdownPreview
 from links import resolve_link
 from preferences import ButtonPreferences
 from find_replace import FindReplaceBar
+from recent_notes import RecentNotes, RecentPopover
 
 
 class MyNotesWindow(Adw.ApplicationWindow):
@@ -38,7 +39,18 @@ class MyNotesWindow(Adw.ApplicationWindow):
         for label, icon, action in (("New", "document-new-symbolic", "new"),
                                     ("Open", "document-open-symbolic", "open"),
                                     ("Save", "media-floppy-symbolic", "save")):
-            button = self.toolbar_button(label, icon, action)
+            if action == "open":
+                button = Gtk.MenuButton(label=label, tooltip_text="Open a recent note or browse")
+                button.set_always_show_arrow(True)
+                button.update_property([Gtk.AccessibleProperty.LABEL], [label])
+                self.styled_buttons.append((button, label, icon))
+                self.open_button = button
+                self.recent_popover = RecentPopover(app.recent_notes, self.open_recent,
+                                                    self.open_document, self.error)
+                button.set_popover(self.recent_popover)
+                self.connect("destroy", lambda _window: self.recent_popover.cleanup())
+            else:
+                button = self.toolbar_button(label, icon, action)
             self.file_controls.append(button)
             if action == "save":
                 self.save_button = button
@@ -373,6 +385,7 @@ class MyNotesWindow(Adw.ApplicationWindow):
         if busy and focus and focus.is_ancestor(self.find_bar):
             self.focus_document()
         self.busy = busy
+        self.open_button.set_sensitive(not busy)
         self.editor.set_editable(not busy)
         for name in ("new", "open", "save", "save-as", "find", "find-replace", "find-next", "find-previous"):
             self.lookup_action(name).set_enabled(not busy)
@@ -443,6 +456,19 @@ class MyNotesWindow(Adw.ApplicationWindow):
     def open_document(self):
         self.confirm_changes(self.choose_open)
 
+    def open_recent(self, selected):
+        def load():
+            self.set_busy(True)
+            selected.load_contents_async(None, self.loaded)
+        self.confirm_changes(load)
+
+    def remember_file(self, file):
+        try:
+            self.get_application().recent_notes.add(file)
+        except OSError:
+            # A history failure must never turn a successful save into a failure.
+            self.toasts.add_toast(Adw.Toast(title="Could not save recent notes history"))
+
     def choose_open(self):
         self.set_busy(True)
         self.file_dialog("Open note").open(self, None, self.open_selected)
@@ -468,6 +494,7 @@ class MyNotesWindow(Adw.ApplicationWindow):
             self.error("Could not open note", error)
             return
         self.file, self.etag = selected, etag
+        self.remember_file(selected)
         self.buffer.begin_irreversible_action()
         self.buffer.set_text(text)
         self.buffer.end_irreversible_action()
@@ -511,6 +538,7 @@ class MyNotesWindow(Adw.ApplicationWindow):
                 self.error("Could not save note", error)
                 return
             self.file, self.etag = file, new_etag
+            self.remember_file(file)
             self.refresh_preview()
             self.buffer.set_modified(False)
             self.set_busy(False)
@@ -536,9 +564,12 @@ class MyNotesWindow(Adw.ApplicationWindow):
 
 
 class MyNotesApp(Adw.Application):
-    def __init__(self, preferences_path=None):
+    def __init__(self, preferences_path=None, recent_path=None):
         super().__init__(application_id="net.anddav.MyNotes")
         self.preferences = ButtonPreferences(preferences_path)
+        if recent_path is None and preferences_path is not None:
+            recent_path = Path(preferences_path).parent / "recent-notes.json"
+        self.recent_notes = RecentNotes(recent_path)
 
     def do_startup(self):
         Adw.Application.do_startup(self)
