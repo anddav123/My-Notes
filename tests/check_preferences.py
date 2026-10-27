@@ -34,7 +34,7 @@ with tempfile.TemporaryDirectory() as directory:
     w.buffer.set_text(note)
     w.present()
     settle()
-    assert len(w.styled_buttons) == 5
+    assert len(w.styled_buttons) == 6
     assert all(button.get_label() == label for button, label, _icon in w.styled_buttons)
     w.show_preferences()
     settle()

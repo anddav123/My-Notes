@@ -13,6 +13,7 @@ from links import resolve_link
 from preferences import ButtonPreferences
 from find_replace import FindReplaceBar
 from recent_notes import RecentNotes, RecentPopover
+from folder_browser import FolderBrowser, FolderState
 
 
 class MyNotesWindow(Adw.ApplicationWindow):
@@ -56,6 +57,7 @@ class MyNotesWindow(Adw.ApplicationWindow):
                 self.save_button = button
         header.pack_start(self.file_controls)
         menu = Gio.Menu()
+        menu.append("Open Folder…", "win.open-folder")
         menu.append("Save As…", "win.save-as")
         for label, action, shortcut in (("Undo", "win.undo", "<primary>z"),
                                          ("Redo", "win.redo", "<primary><shift>z")):
@@ -78,6 +80,12 @@ class MyNotesWindow(Adw.ApplicationWindow):
         cycle.connect("activate", self.cycle_view)
         self.add_action(cycle)
         app.set_accels_for_action("win.cycle-view", ["<primary><shift>p"])
+        self.sidebar_action = Gio.SimpleAction.new_stateful("sidebar", None,
+                                                          GLib.Variant("b", app.folder_state.visible))
+        self.sidebar_action.connect("activate", self.toggle_sidebar)
+        self.add_action(self.sidebar_action)
+        app.set_accels_for_action("win.sidebar", ["F9"])
+        header.pack_start(self.toolbar_button("Folders", "sidebar-show-symbolic", "sidebar", toggle=True))
         view_controls = Gtk.Box()
         view_controls.add_css_class("linked")
         view_controls.append(self.toolbar_button("Editor", "document-edit-symbolic", "editor", toggle=True))
@@ -116,7 +124,16 @@ class MyNotesWindow(Adw.ApplicationWindow):
         self.status.add_css_class("dim-label")
         toolbar.add_bottom_bar(self.status)
         self.toasts = Adw.ToastOverlay()
-        self.toasts.set_child(self.panes)
+        self.folder_browser = FolderBrowser(self.choose_folder, self.open_recent)
+        self.folder_browser.set_visible(app.folder_state.visible)
+        self.browser_panes = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        self.browser_panes.set_start_child(self.folder_browser)
+        self.browser_panes.set_end_child(self.panes)
+        self.browser_panes.set_resize_start_child(False)
+        self.browser_panes.set_shrink_start_child(False)
+        self.browser_panes.set_shrink_end_child(False)
+        self.browser_panes.set_position(250)
+        self.toasts.set_child(self.browser_panes)
         toolbar.set_content(self.toasts)
         self.set_content(toolbar)
         self.find_bar = FindReplaceBar(self.editor)
@@ -127,6 +144,7 @@ class MyNotesWindow(Adw.ApplicationWindow):
         for name, callback, shortcuts in (
             ("new", self.new_document, ["<primary>n"]),
             ("open", self.open_document, ["<primary>o"]),
+            ("open-folder", self.choose_folder, ["<primary><shift>o"]),
             ("save", self.save_document, ["<primary>s"]),
             ("save-as", lambda: self.save_document(save_as=True), ["<primary><shift>s"]),
             ("preferences", self.show_preferences, ["<primary>comma"]),
@@ -157,6 +175,50 @@ class MyNotesWindow(Adw.ApplicationWindow):
         self.update_status()
         self.update_undo_actions()
         self.refresh_preview()
+        self.connect("unrealize", lambda _window: self.folder_browser.cleanup())
+        if app.folder_state.folder:
+            self.folder_browser.set_folder(app.folder_state.folder)
+
+    def save_folder_state(self):
+        try:
+            self.get_application().folder_state.save(self.folder_browser.folder,
+                                                     self.folder_browser.get_visible())
+        except OSError as error:
+            self.error("Could not remember folder settings", error)
+
+    def toggle_sidebar(self, _action, _parameter):
+        visible = not self.folder_browser.get_visible()
+        self.folder_browser.set_visible(visible)
+        self.sidebar_action.set_state(GLib.Variant("b", visible))
+        self.save_folder_state()
+        if visible and not self.folder_browser.folder:
+            self.choose_folder()
+
+    def choose_folder(self):
+        if self.busy:
+            return
+        self.set_busy(True)
+        dialog = Gtk.FileDialog(title="Choose notes folder")
+        if self.folder_browser.folder:
+            dialog.set_initial_folder(Gio.File.new_for_path(self.folder_browser.folder))
+
+        def selected(chooser, result):
+            self.set_busy(False)
+            try:
+                folder = chooser.select_folder_finish(result)
+            except GLib.Error as error:
+                self.dialog_error(error)
+                return
+            path = folder.get_path()
+            if not path:
+                self.error("Could not open folder", "Choose a local folder for your notes.")
+                return
+            self.folder_browser.set_folder(path)
+            self.folder_browser.set_visible(True)
+            self.sidebar_action.set_state(GLib.Variant("b", True))
+            self.save_folder_state()
+
+        dialog.select_folder(self, None, selected)
 
     def update_undo_actions(self, *_args):
         self.lookup_action("undo").set_enabled(not self.busy and self.buffer.get_can_undo())
@@ -376,6 +438,7 @@ class MyNotesWindow(Adw.ApplicationWindow):
         name = self.file.get_basename() if self.file else "Untitled"
         self.title_widget.set_title(f"{'• ' if self.buffer.get_modified() else ''}{name}")
         self.set_title(f"{name} — My Notes")
+        self.folder_browser.select(self.file.get_path() if self.file else None)
         text = self.text()
         mode = "GFM" if self.gfm_action.get_state().get_boolean() else "CommonMark"
         self.status.set_text(f"{mode}  ·  {len(text.split())} words  ·  {len(text)} characters")
@@ -386,8 +449,9 @@ class MyNotesWindow(Adw.ApplicationWindow):
             self.focus_document()
         self.busy = busy
         self.open_button.set_sensitive(not busy)
+        self.folder_browser.set_sensitive(not busy)
         self.editor.set_editable(not busy)
-        for name in ("new", "open", "save", "save-as", "find", "find-replace", "find-next", "find-previous"):
+        for name in ("new", "open", "open-folder", "save", "save-as", "find", "find-replace", "find-next", "find-previous"):
             self.lookup_action(name).set_enabled(not busy)
         self.find_bar.set_sensitive(not busy)
         self.update_undo_actions()
@@ -570,6 +634,9 @@ class MyNotesApp(Adw.Application):
         if recent_path is None and preferences_path is not None:
             recent_path = Path(preferences_path).parent / "recent-notes.json"
         self.recent_notes = RecentNotes(recent_path)
+        state_path = (Path(preferences_path).parent / "folder-browser.json" if preferences_path else
+                      Path(GLib.get_user_state_dir()) / "MyNotes/folder-browser.json")
+        self.folder_state = FolderState(state_path)
 
     def do_startup(self):
         Adw.Application.do_startup(self)
