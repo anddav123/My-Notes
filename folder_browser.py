@@ -10,6 +10,20 @@ from gi.repository import Gio, GLib, Gtk, Pango
 SCANS = ThreadPoolExecutor(max_workers=2, thread_name_prefix="note-folders")
 
 
+def note_filename(value):
+    name = value.strip()
+    if (not name or name in (".", "..") or any(char in name for char in ("/", "\\"))
+            or any(ord(char) < 32 or ord(char) == 127 for char in name)):
+        raise ValueError("Enter a filename without folder separators or control characters.")
+    if name.casefold() in (".md", ".markdown"):
+        raise ValueError("Enter a name before the Markdown extension.")
+    if not Path(name).suffix:
+        name += ".md"
+    if Path(name).suffix.casefold() not in (".md", ".markdown") or name.casefold() in (".md", ".markdown"):
+        raise ValueError("Use a filename ending in .md or .markdown.")
+    return name
+
+
 class FolderState:
     def __init__(self, path):
         self.path = Path(path)
@@ -70,6 +84,9 @@ class FolderBrowser(Gtk.Box):
         self.title = Gtk.Label(label="Notes folder", xalign=0, hexpand=True,
                                ellipsize=Pango.EllipsizeMode.MIDDLE, max_width_chars=24)
         top.append(self.title)
+        self.new_button = Gtk.Button(icon_name="document-new-symbolic", tooltip_text="New note in this folder",
+                                     action_name="win.new-in-folder", sensitive=False)
+        top.append(self.new_button)
         change = Gtk.Button(icon_name="folder-open-symbolic", tooltip_text="Choose notes folder")
         change.connect("clicked", lambda _button: choose())
         top.append(change)
@@ -95,6 +112,7 @@ class FolderBrowser(Gtk.Box):
         if folder != self.folder:
             self.expanded.clear()
         self.folder = folder
+        self.new_button.set_sensitive(True)
         self.title.set_label(Path(folder).name or folder)
         self.title.set_tooltip_text(folder)
         self.refresh()

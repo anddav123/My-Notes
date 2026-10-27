@@ -21,9 +21,24 @@ The chosen local folder and sidebar visibility are remembered per user in
 Missing or unreadable folders show a message in the sidebar; use the folder
 button to select another. Note contents are never stored in the browser settings.
 
+## Creating a note
+
+Click the new-document icon at the top of the sidebar, or choose
+**New Note in Folder…** from the main menu. Enter a filename for the browser's
+root folder; the dialog shows that destination. A missing extension becomes
+`.md`; `.md` and `.markdown` extensions are accepted. Folder separators and
+control characters are rejected. Existing files and symlinks are never replaced.
+
+Cancel closes the filename prompt without creating a file. If the current
+document has changes, Save, Discard, or Cancel appears before creation. A
+cancelled or failed save prevents creation. Successful creation opens the empty
+note, selects it in the sidebar, and adds it to recent files. The normal New
+toolbar button continues to start an untitled document.
+
 Recent files, normal Open, and editor/preview controls remain available.
 Future Debian builds include the module; existing packages were not rebuilt.
 
 Integration checks:
 
     PYTHONPATH=. .venv/bin/python tests/check_folder_browser.py
+    PYTHONPATH=. .venv/bin/python tests/check_new_folder_note.py

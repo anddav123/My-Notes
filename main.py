@@ -13,7 +13,7 @@ from links import resolve_link
 from preferences import ButtonPreferences
 from find_replace import FindReplaceBar
 from recent_notes import RecentNotes, RecentPopover
-from folder_browser import FolderBrowser, FolderState
+from folder_browser import FolderBrowser, FolderState, note_filename
 
 
 class MyNotesWindow(Adw.ApplicationWindow):
@@ -55,9 +55,9 @@ class MyNotesWindow(Adw.ApplicationWindow):
             self.file_controls.append(button)
             if action == "save":
                 self.save_button = button
-        header.pack_start(self.file_controls)
         menu = Gio.Menu()
         menu.append("Open Folder…", "win.open-folder")
+        menu.append("New Note in Folder…", "win.new-in-folder")
         menu.append("Save As…", "win.save-as")
         for label, action, shortcut in (("Undo", "win.undo", "<primary>z"),
                                          ("Redo", "win.redo", "<primary><shift>z")):
@@ -86,6 +86,7 @@ class MyNotesWindow(Adw.ApplicationWindow):
         self.add_action(self.sidebar_action)
         app.set_accels_for_action("win.sidebar", ["F9"])
         header.pack_start(self.toolbar_button("Folders", "sidebar-show-symbolic", "sidebar", toggle=True))
+        header.pack_start(self.file_controls)
         view_controls = Gtk.Box()
         view_controls.add_css_class("linked")
         view_controls.append(self.toolbar_button("Editor", "document-edit-symbolic", "editor", toggle=True))
@@ -145,6 +146,7 @@ class MyNotesWindow(Adw.ApplicationWindow):
             ("new", self.new_document, ["<primary>n"]),
             ("open", self.open_document, ["<primary>o"]),
             ("open-folder", self.choose_folder, ["<primary><shift>o"]),
+            ("new-in-folder", self.new_folder_note, []),
             ("save", self.save_document, ["<primary>s"]),
             ("save-as", lambda: self.save_document(save_as=True), ["<primary><shift>s"]),
             ("preferences", self.show_preferences, ["<primary>comma"]),
@@ -223,6 +225,83 @@ class MyNotesWindow(Adw.ApplicationWindow):
     def update_undo_actions(self, *_args):
         self.lookup_action("undo").set_enabled(not self.busy and self.buffer.get_can_undo())
         self.lookup_action("redo").set_enabled(not self.busy and self.buffer.get_can_redo())
+
+    def new_folder_note(self):
+        if self.busy:
+            return
+        folder = self.folder_browser.folder
+        if not folder:
+            self.error("Choose a notes folder", "Open a folder before creating a note in it.")
+            return
+        dialog = Adw.AlertDialog(heading="New Note", body=f"Create a Markdown note in:\n{folder}")
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        entry = Gtk.Entry(placeholder_text="Note name.md", activates_default=True)
+        entry.update_property([Gtk.AccessibleProperty.LABEL], ["New note filename"])
+        hint = Gtk.Label(label="The .md extension is added if omitted.", wrap=True, xalign=0)
+        hint.add_css_class("dim-label")
+        box.append(entry)
+        box.append(hint)
+        dialog.set_extra_child(box)
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("create", "Create")
+        dialog.set_response_appearance("create", Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_default_response("create")
+        dialog.set_close_response("cancel")
+        dialog.set_response_enabled("create", False)
+
+        def validate(_entry):
+            try:
+                note_filename(entry.get_text())
+            except ValueError as error:
+                dialog.set_response_enabled("create", False)
+                hint.set_label(str(error) if entry.get_text() else "The .md extension is added if omitted.")
+            else:
+                dialog.set_response_enabled("create", True)
+                hint.set_label("The .md extension is added if omitted.")
+
+        def respond(_dialog, response):
+            self.set_busy(False)
+            if response == "create":
+                try:
+                    name = note_filename(entry.get_text())
+                except ValueError as error:
+                    self.error("Could not create note", error)
+                    return
+                target = Gio.File.new_for_path(str(Path(folder) / name))
+                self.confirm_changes(lambda: self.create_folder_note(target))
+
+        entry.connect("changed", validate)
+        dialog.connect("response", respond)
+        self.set_busy(True)
+        dialog.present(self)
+        entry.grab_focus()
+
+    def create_folder_note(self, target):
+        self.set_busy(True)
+
+        def created(file, result):
+            try:
+                stream = file.create_finish(result)
+            except GLib.Error as error:
+                self.set_busy(False)
+                self.error("Could not create note", error)
+                return
+
+            def closed(source, result):
+                try:
+                    source.close_finish(result)
+                except GLib.Error as error:
+                    self.set_busy(False)
+                    self.error("Could not finish creating note", error)
+                    return
+                self.folder_browser.refresh()
+                file.load_contents_async(None, self.loaded)
+
+            stream.close_async(GLib.PRIORITY_DEFAULT, None, closed)
+
+        # Exclusive creation fails if any file or symlink already has this
+        # name. Never use replace_contents here: it would overwrite notes.
+        target.create_async(Gio.FileCreateFlags.NONE, GLib.PRIORITY_DEFAULT, None, created)
 
     def undo_redo(self, redo=False):
         if self.busy:
@@ -451,7 +530,7 @@ class MyNotesWindow(Adw.ApplicationWindow):
         self.open_button.set_sensitive(not busy)
         self.folder_browser.set_sensitive(not busy)
         self.editor.set_editable(not busy)
-        for name in ("new", "open", "open-folder", "save", "save-as", "find", "find-replace", "find-next", "find-previous"):
+        for name in ("new", "open", "open-folder", "new-in-folder", "save", "save-as", "find", "find-replace", "find-next", "find-previous"):
             self.lookup_action(name).set_enabled(not busy)
         self.find_bar.set_sensitive(not busy)
         self.update_undo_actions()
