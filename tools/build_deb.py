@@ -114,6 +114,10 @@ def build(args):
         icons.mkdir(parents=True)
         shutil.copyfile(ROOT / "data/icons/hicolor/scalable/apps/net.anddav.MyNotes.svg", icons / "net.anddav.MyNotes.svg")
         applications = stage / "usr/share/applications"
+        metainfo = stage / "usr/share/metainfo"
+        metainfo.mkdir(parents=True)
+        shutil.copyfile(ROOT / "data/net.anddav.MyNotes.metainfo.xml",
+                        metainfo / "net.anddav.MyNotes.metainfo.xml")
         applications.mkdir(parents=True)
         desktop = (ROOT / "data/net.anddav.MyNotes.desktop.in").read_text()
         desktop = desktop.replace("Exec=/usr/bin/sh @RUN_SCRIPT@", "Exec=/usr/bin/my-notes")
@@ -125,7 +129,7 @@ def build(args):
             subprocess.run(["desktop-file-validate", str(desktop_file)], check=True)
         launcher = stage / "usr/bin/my-notes"
         launcher.write_text('#!/bin/sh\nexec /usr/bin/python3 -I /usr/share/my-notes/launch.py "$@"\n')
-        for name in ("LICENSE", "README.md"):
+        for name in ("LICENSE", "README.md", "RELEASE_NOTES.md"):
             shutil.copyfile(ROOT / name, doc / name)
         shutil.copyfile(ROOT / "packaging/README.md", doc / "README.Debian")
         # Retain notices for native code included in upstream dependency sources,

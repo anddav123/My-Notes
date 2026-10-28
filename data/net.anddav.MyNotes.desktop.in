@@ -9,6 +9,6 @@ Icon=net.anddav.MyNotes
 Terminal=false
 StartupNotify=true
 StartupWMClass=net.anddav.MyNotes
-Categories=Utility;TextEditor;
+Categories=Office;
 Keywords=Notes;Markdown;Editor;
 X-MyNotes-Managed=true

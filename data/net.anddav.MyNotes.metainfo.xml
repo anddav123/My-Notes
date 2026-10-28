@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>net.anddav.MyNotes</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <name>My Notes</name>
+  <summary>Write and preview Markdown notes</summary>
+  <description>
+    <p>My Notes is a native GTK and Libadwaita Markdown editor for GNOME. Keep your notes as local files and browse them in a folder sidebar.</p>
+    <ul>
+      <li>Edit Markdown with a live preview or use separate editor and preview views.</li>
+      <li>Use CommonMark or enable GitHub Flavoured Markdown extensions.</li>
+      <li>Preview tables, task lists, links and images.</li>
+      <li>Find and replace text, undo edits and return to recent notes.</li>
+      <li>Create notes in your chosen folder with protection against accidental overwrites.</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">net.anddav.MyNotes.desktop</launchable>
+  <url type="homepage">https://github.com/anddav123/My-Notes</url>
+  <url type="bugtracker">https://github.com/anddav123/My-Notes/issues</url>
+  <developer id="net.anddav"><name>Anddav</name></developer>
+  <categories><category>Office</category></categories>
+  <keywords><keyword>Markdown</keyword><keyword>Notes</keyword></keywords>
+  <content_rating type="oars-1.1"/>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Browse notes and edit Markdown alongside its live preview</caption>
+      <image type="source" width="1280" height="820">https://anddav.net/apt/media/my-notes/0.1.0/editor-preview.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Read formatted notes in the preview-only view</caption>
+      <image type="source" width="1280" height="820">https://anddav.net/apt/media/my-notes/0.1.0/preview.png</image>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="0.1.0" date="2026-10-28" type="stable">
+      <description>
+        <p>The first release of My Notes brings Markdown editing and a native live preview to GNOME.</p>
+        <ul>
+          <li>Browse folders, create notes and return to the five most recent files.</li>
+          <li>Choose editor-only, split or preview-only views.</li>
+          <li>Use CommonMark or enable tables, task lists and other GitHub Flavoured Markdown extensions.</li>
+          <li>Find and replace text, undo and redo edits, and choose text or icon toolbar buttons.</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+</component>
